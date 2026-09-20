@@ -2,7 +2,7 @@
 
 ## Version 0.5.1: ntfs3 metadata verification
 
-**140 tests passed** locally with the real ntfs3 regression enabled. In environments
+**141 tests passed** locally with the real ntfs3 regression enabled. In environments
 without an explicit ntfs3 test mount, that one integration test is skipped.
 
 The ntfs3 driver exposes `$LXUID`, `$LXGID`, `$LXMOD` and `$LXDEV` as filesystem
@@ -12,7 +12,12 @@ also losing a root directory's saved default ACL. The failure was reproduced on
 a real existing ntfs3 filesystem with a small synthetic source.
 
 Receiver-only xattr filters now protect exactly those four bookkeeping names.
-Source xattr filtering is unchanged. Default and named ACLs remain stored through
+Source xattr filtering is unchanged. Two additional receiver rules protect
+`user.rsync.%aacl` and `user.rsync.%dacl` from general xattr cleanup, which otherwise
+removed newly written ACLs on directories carrying ordinary user attributes such
+as `user.DOSATTRIB`. The ACL handler still updates and removes these fields when
+the actual source ACL changes; a regression test covers both changes and removal.
+Default and named ACLs remain stored through
 fake-super; file checksums and ordinary user xattrs remain fully checked.
 Synthetic real-NTFS tests verify the backup and restore to both a Linux filesystem
 and NTFS. Deliberately corrupted contents and user xattrs still fail verification.

@@ -567,6 +567,11 @@ def transfer_command(config, source, destination, previous=None, verify=False):
         "--filter=-xr $LXGID",
         "--filter=-xr $LXMOD",
         "--filter=-xr $LXDEV",
+        # ACL handling owns these two fake-super fields. Ordinary xattr
+        # reconciliation must not delete them when a directory also has user
+        # attributes (for example Samba's user.DOSATTRIB).
+        "--filter=-xr user.rsync.%aacl",
+        "--filter=-xr user.rsync.%dacl",
     ]
     if config.bandwidth_limit_kib:
         argv += ["--bwlimit=" + str(config.bandwidth_limit_kib)]
