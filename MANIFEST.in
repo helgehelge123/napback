@@ -1,0 +1,6 @@
+include LICENSE README.md SECURITY.md install.sh uv.lock
+recursive-include docs *.md
+recursive-include examples *.json
+recursive-include docker Dockerfile *.yaml
+include tests/Dockerfile.compat
+recursive-exclude * *.bak*
