@@ -284,7 +284,7 @@ def test_setup_defaults_to_native_encryption(tmp_path, monkeypatch):
         patch.object(core.Config, "remote", return_value=""),
         patch.object(core, "plan_sources", return_value=[]),
     ):
-        assert main(["--config", str(path), "setup"]) == 0
+        assert main(["--config", str(path), "setup", "--terminal"]) == 0
     assert core.Config.load(path).storage == "zfs_raw"
     assert core.read_json(target / core.MARKER)["storage"] == "zfs_raw"
 

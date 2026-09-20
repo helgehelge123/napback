@@ -465,7 +465,7 @@ def test_setup_checks_sources_before_initializing_target(tmp_path, monkeypatch):
         patch.object(core.Config, "remote", return_value="tank/documents\t1M\t/mnt/tank/documents"),
         patch("napback.core.plan_sources", return_value=[]),
     ):
-        assert main(["--config", str(configfile), "setup"]) == 0
+        assert main(["--config", str(configfile), "setup", "--terminal"]) == 0
     loaded = core.Config.load(configfile)
     core.check_repository(loaded)
     assert loaded.sources == [{"name": "dataset-1", "dataset": "tank/documents", "recursive": True}]
@@ -480,7 +480,7 @@ def test_setup_snapshot_failure_creates_no_target(tmp_path, monkeypatch):
         patch.object(core.Config, "remote", return_value="tank/documents\t1M\t/mnt/tank/documents"),
         patch("napback.core.plan_sources", side_effect=core.BackupError("No common snapshot")),
     ):
-        assert main(["--config", str(configfile), "setup"]) == 1
+        assert main(["--config", str(configfile), "setup", "--terminal"]) == 1
     assert not target.exists()
     assert not configfile.exists()
 

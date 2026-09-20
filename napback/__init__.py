@@ -1,3 +1,3 @@
 """Napback: backups that wait until your PC is awake."""
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"

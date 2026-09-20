@@ -43,93 +43,64 @@ Ohne Sicherungskonfiguration zeigt Napback „Noch nicht eingerichtet“ bzw.
 
 Für eine Installation ohne Tray und Qt: `./install.sh --cli-only`.
 
-## Einrichten
+## Einrichten – jetzt im Browser
+
+Öffne **Napback** im Anwendungsmenü oder doppelklicke auf sein Symbol im Tray.
+Alternativ:
 
 ```sh
 napback setup
 ```
 
-Der Assistent erklärt jeden Schritt auf Deutsch direkt vor der Eingabe. `?`
-öffnet bei Bedarf die ausführliche Hilfe zum aktuellen Feld; Enter übernimmt die Vorgabe in eckigen
-Klammern. Falsche Eingaben kannst Du direkt korrigieren. Englisch ist mit
-`napback setup --language en` verfügbar.
+Es öffnet sich eine lokale Webseite. Sie läuft auf Deinem PC und schreibt die
+Einstellungen direkt in Napback. Du musst keine JSON-Datei bearbeiten.
 
-| Eingabe | Bedeutung und Beispiel |
-| --- | --- |
-| TrueNAS-Zugang / SSH-Host | `backup@192.168.1.10`: vor `@` der Benutzer auf TrueNAS, dahinter die NAS-Adresse. Kein `https://` und kein Ordnerpfad. Ein vorhandener SSH-Alias geht ebenfalls. |
-| SSH-Schlüsseldatei | Pfad zum privaten Schlüssel auf Deinem PC, etwa `~/.ssh/id_ed25519_nas`. Nicht den Schlüsselinhalt eingeben. Der öffentliche Schlüssel aus der passenden `.pub`-Datei gehört in TrueNAS zum Benutzer. |
-| Erhöhte Rechte / sudo | Ja, wenn Dein NAS-Benutzer ZFS-Befehle mit `sudo -n` ohne Passwortabfrage ausführen darf. |
-| Datasets | Vollständige Namen aus der angezeigten Liste, etwa `tank/dokumente,tank/fotos`. **Ohne `/mnt/` eingeben:** `Apps` statt `/mnt/Apps`. Kinder werden mitgesichert. |
-| Snapshot-Namensanfang | `auto-` passt zu `auto-2026-09-20_12-00`; bei `autosnap_...` entsprechend `autosnap_`. `*` erlaubt alle Namen. |
-| Zielordner | Neuer oder leerer Ordner auf dem PC, etwa `~/NAS-Backup` oder auf einer bereits eingebundenen Festplatte. |
-| Speichermodus | `zfs_raw` erhält die vorhandene ZFS-Verschlüsselung; `files` speichert unverschlüsselte Dateien. |
-| Minutenintervall | Standard `1`: jede Minute nach neuen Snapshots schauen. Ohne neue Generation wird nichts kopiert. |
+1. **NAS verbinden:** Adresse und Benutzer getrennt eintragen. Den SSH-Schlüssel
+   auf Deinem PC auswählen. Dann „Verbindung prüfen & Daten anzeigen“ anklicken.
+2. **Daten auswählen:** Gewünschte Bereiche anhaken. Unterbereiche lassen sich
+   aufklappen und einzeln abwählen. Die Seite zeigt echte Snapshot-Namen und Datum.
+   Napback sucht den passenden neuesten Stand selbst; Du brauchst keinen
+   Namensanfang mehr einzugeben.
+3. **Auf dem PC speichern:** Zielordner auswählen, Verschlüsselung und Intervall
+   lesen und einstellen. Standard: vorhandene ZFS-Verschlüsselung erhalten und
+   jede Minute nach neuen Snapshots schauen.
+4. **Prüfen & speichern:** Die Zusammenfassung zeigt Quellen, ausgelassene Bereiche,
+   Zielordner und Aufbewahrung. Erst der Speichern-Knopf übernimmt die Einstellungen.
 
-In TrueNAS findest Du den SSH-Dienst unter **System > Services > SSH**. Beim
-Benutzer unter **Credentials > Users** (je nach Version **Local Users**) den
-SSH-/Shell-Zugang und den **Public SSH Key** prüfen. Die Oberfläche unterscheidet
-sich etwas zwischen TrueNAS-Versionen. Bei Verbindungsfehlern zeigt der Assistent
-konkrete Hinweise und einen passenden SSH-Testbefehl. Den Server-Fingerabdruck vor
-der ersten Bestätigung über die NAS-Konsole prüfen.
+Fehlende Snapshots oder unverschlüsselte Bereiche werden konkret genannt. Ein
+Bereich mit Fehlern wird nicht stillschweigend ausgelassen. Du kannst seine
+Auswahl ändern oder die Ursache auf TrueNAS beheben. Für verschlüsselte Archive
+müssen alle eingeschlossenen Bereiche schon auf dem NAS verschlüsselt sein.
+Virtuelle Festplatten (Zvols) und eine bootfähige Bootplatten-Wiederherstellung
+werden nicht unterstützt.
 
-Offizielle TrueNAS-Hilfe: [SSH-Dienst](https://www.truenas.com/docs/scale/25.10/scaletutorials/systemsettings/services/sshservicescale/)
-und [Benutzereinstellungen](https://www.truenas.com/docs/scale/25.10/scaleuireference/credentials/usersscreen/).
+Unter **Meine Backups** siehst Du den letzten Stand. Dort kannst Du eine neue
+Prüfung starten oder die letzte Sicherung vollständig auf Schäden prüfen lassen.
+Das Schließen der Webseite beendet keine eingerichteten automatischen Backups.
+Unter **Wiederherstellung verstehen** stehen Voraussetzungen und der Rückweg.
 
-Übernimm `zfs_raw`, um die vorhandene ZFS-Verschlüsselung zu erhalten. Alle
-gewählten Datasets einschließlich ihrer Kinder müssen verschlüsselt sein.
-Unverschlüsselte Quellen werden abgewiesen; es gibt keinen stillen Klartext-Fallback. Enter übernimmt eine Minute; erlaubt sind
-1 bis 1440 Minuten. Ein vorhandener SSH-Alias kann den Schlüssel und weitere
-SSH-Einstellungen enthalten. Den Hostschlüssel vorher prüfen. SSH und ggf.
-`sudo -n` auf dem NAS müssen ohne Passwortabfrage funktionieren.
+Die Seite wird nur auf `127.0.0.1` bereitgestellt. Öffne sie über Napback; fremde
+Webseiten dürfen ihre Einstellungen nicht ändern. Detaillierte Bedienung:
+[Weboberfläche](web-interface.md).
 
-TrueNAS muss bereits regelmäßige Snapshots anlegen, bei Kind-Datasets gemeinsam
-als rekursive Snapshots. `auto-` ist lediglich der standardmäßige Namensanfang,
-nach dem Napback sucht, beispielsweise `auto-2026-09-20_12-00`. Napback erstellt
-selbst keine NAS-Snapshots. Unter **Data Protection > Periodic Snapshot Tasks**
-einen passenden Auftrag prüfen oder anlegen, bei Kindern **Recursive** aktivieren.
-Vor dem Fortfahren muss bereits eine passende Generation existieren.
-Den Filter wählst Du im Assistenten oder später mit `snapshot_prefix` in der
-Konfiguration; ein leerer JSON-Wert erlaubt jeden Namensanfang. Standardmäßig darf
-die gewählte Generation höchstens 48 Stunden alt sein.
+Den bisherigen Terminal-Assistenten startest Du bei Bedarf ausdrücklich mit
+`napback setup --terminal`, auf Englisch mit zusätzlichem `--language en`.
 
-Nur beim alternativen Modus `files` kann als Docker-Image `napback-source:0.1.0` verwendet werden. Es wird auf dem
-NAS mit `docker compose -f docker/compose.yaml build` erstellt. Das Sender-Image
-bleibt auch mit Napback 0.3.2 bei Version 0.1.0. Alternativ verwendet Napback das
-auf dem NAS installierte rsync. Es wird kein dauerhaft laufender Container
-benötigt und kein zusätzlicher Port geöffnet. Im verschlüsselten Modus nutzt
-Napback direkt `zfs send -w -p` auf TrueNAS; Docker und rsync werden dafür nicht
-gebraucht. Auch gesperrte Datasets lassen sich so sichern.
+## Was passiert automatisch?
 
-```sh
-napback plan          # Welche Snapshots werden gelesen?
-napback run           # Jetzt prüfen und neue Generation sichern
-napback status        # Letzter Erfolg und letzter Versuch
-napback verify        # Lokale Sicherung vollständig prüfen
-napback restore-zfs tank/wiederhergestellt --source dataset-1
-```
+TrueNAS muss Snapshots bereits anlegen. Dein PC schaut im eingestellten
+Minutentakt nach und holt nur neue Stände ab. War der PC aus oder im Standby,
+holt er beim nächsten Check den neuesten passenden Stand. Zwischenstände aus
+der Offline-Zeit werden nicht alle nachträglich übertragen. Napback weckt den
+PC nicht auf und ändert keine NAS-Snapshot-Aufträge.
 
-Der Hintergrund-Timer läuft über systemd und prüft im gewählten Intervall. Für
-Sicherungen bereits vor der Anmeldung einmal `loginctl enable-linger "$USER"`
-ausführen. Das kann abhängig von Deiner Distribution eine lokale Autorisierung
-verlangen. War der PC aus oder im Standby, holt der nächste fällige Check die
-neueste gemeinsame Snapshot-Generation ab. Zwischenstände aus der Offline-Zeit
-werden nicht alle einzeln nachgeladen. Die Prüfung weckt den PC nicht auf.
-Die tatsächliche Reaktion kann durch den Minutentakt etwas später erfolgen.
+Die Automatik startet bei Deiner Anmeldung. Für Sicherungen schon vor dem Login
+kannst Du optional `loginctl enable-linger "$USER"` aktivieren. Das ist für den
+normalen Betrieb nach Anmeldung nicht nötig.
 
-## Im Tray
-
-Das Symbol zeigt Prüfung, laufende Sicherung, Erfolg oder Fehler. Sein Menü
-enthält „Jetzt prüfen“, Sicherungsordner, Konfiguration, Einrichtung, Protokoll
-und „Prüfintervall…“. Änderungen am Minutenintervall gelten ohne Neuinstallation.
-„Jetzt prüfen“ überspringt die Wartezeit, sichert denselben Snapshot aber nicht
-erneut. Dafür wäre ausdrücklich `napback run --force` nötig.
-
-Das Tray kann beendet werden; der separate Sicherungsdienst läuft weiter.
-Automatische Sicherungen deaktivierst Du mit:
-
-```sh
-systemctl --user disable --now napback.timer
-```
+Im Tray gibt es zusätzlich „Jetzt prüfen“, den Sicherungsordner und das
+Prüfintervall. Ein Doppelklick öffnet die Weboberfläche. Das Tray kann beendet
+werden; ein aktivierter Backup-Timer läuft unabhängig weiter.
 
 ## Daten und Verschlüsselung auf dem PC
 

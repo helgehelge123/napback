@@ -229,8 +229,11 @@ class Config:
                 "path",
                 "dataset",
                 "recursive",
+                "exclude",
             }:
-                raise BackupError("Each source accepts name, path OR dataset, and recursive")
+                raise BackupError(
+                    "Each source accepts name, path OR dataset, recursive and exclude"
+                )
             name = checked_name(source.get("name"), "source name")
             if name in names:
                 raise BackupError(f"Duplicate source name: {name}")
@@ -239,8 +242,8 @@ class Config:
                 raise BackupError("Each source needs exactly one of path or dataset")
             if "path" in source:
                 absolute(source["path"], "source path")
-                if "recursive" in source:
-                    raise BackupError("recursive is only supported for ZFS datasets")
+                if "recursive" in source or "exclude" in source:
+                    raise BackupError("recursive and exclude are only supported for ZFS datasets")
             else:
                 if (
                     not config.host
@@ -252,6 +255,17 @@ class Config:
                     raise BackupError("Invalid dataset name")
                 if not isinstance(source.get("recursive", True), bool):
                     raise BackupError("recursive must be a boolean")
+                excluded = source.get("exclude", [])
+                if not isinstance(excluded, list) or any(
+                    not isinstance(item, str)
+                    or not item.startswith(source["dataset"] + "/")
+                    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/-]*", item)
+                    or any(part in ("", ".", "..") for part in item.split("/"))
+                    for item in excluded
+                ):
+                    raise BackupError("exclude must list child dataset names within this source")
+                if excluded and not source.get("recursive", True):
+                    raise BackupError("exclude requires recursive=true")
         if config.trigger == "new_snapshot" and not all(
             "dataset" in source for source in config.sources
         ):
@@ -465,6 +479,11 @@ def plan_sources(config, now):
             dataset, mountpoint = line.split("\t")
             if dataset != root and not dataset.startswith(root + "/"):
                 raise BackupError("Unexpected dataset in ZFS response")
+            if any(
+                dataset == item or dataset.startswith(item + "/")
+                for item in source.get("exclude", [])
+            ):
+                continue
             if config.storage == "files" and mountpoint in ("none", "legacy", "-"):
                 raise BackupError(f"Dataset {dataset} needs a normal mounted filesystem")
             if config.storage == "files":

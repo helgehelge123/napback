@@ -56,3 +56,20 @@ detect corruption, not repair it; retain another independent copy.
 Report suspected vulnerabilities privately through the repository owner's
 available contact channel. Do not publish credentials or personal backup paths
 in public issues.
+
+## Local browser interface
+
+The interface binds to IPv4 loopback only, on an automatically allocated port.
+API reads and writes require a random per-process capability token delivered in
+the browser URL fragment, then retained in session storage. It is never logged.
+Host and Origin checks reject DNS rebinding and cross-origin requests; static
+assets carry a restrictive CSP and no external resources. Runtime metadata is
+stored outside the repository with mode 0600. Directory browsing lists directory
+names only; SSH-key discovery only enumerates filenames, never key contents.
+
+NAS discovery reads ZFS metadata and, if permitted, snapshot-task settings. Saving
+requires a successful review, a short-lived review token and an unchanged local
+configuration. Writes back up the old config. The browser cannot execute arbitrary
+shell commands or create/modify NAS snapshot tasks. Disabling automatic checks
+stops only the timer, never an active transfer. Dataset exclusions are explicit
+and are shown in the review; encryption checks are never relaxed automatically.

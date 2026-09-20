@@ -46,7 +46,7 @@ def test_setup_saves_explicit_key_prefix_and_retries_invalid_input(tmp_path, mon
         patch.object(core.Config, "remote", remote),
         patch.object(core, "plan_sources", return_value=[]),
     ):
-        assert main(["--config", str(config_path), "setup"]) == 0
+        assert main(["--config", str(config_path), "setup", "--terminal"]) == 0
     config = core.Config.load(config_path)
     assert config.ssh_options == ["-i", str(key), "-oIdentitiesOnly=yes"]
     assert observed == [config.ssh_options]
@@ -65,7 +65,7 @@ def test_failed_ssh_shows_actionable_help_and_never_writes_config(tmp_path, monk
     with patch.object(
         core.Config, "remote", side_effect=core.BackupError("Host key verification failed")
     ):
-        assert main(["--config", str(config), "setup"]) == 1
+        assert main(["--config", str(config), "setup", "--terminal"]) == 1
     message = capsys.readouterr().err
     assert "System > Services > SSH" in message
     assert "ssh -oStrictHostKeyChecking=ask backup@nas true" in message
@@ -83,7 +83,7 @@ def test_english_setup_remains_available(tmp_path, monkeypatch, capsys):
         patch.object(core.Config, "remote", return_value=""),
         patch.object(core, "plan_sources", return_value=[]),
     ):
-        assert main(["--config", str(config), "setup", "--language", "en"]) == 0
+        assert main(["--config", str(config), "setup", "--terminal", "--language", "en"]) == 0
     assert core.Config.load(config).snapshot_prefix == ""
     assert "Your TrueNAS username and NAS address" in capsys.readouterr().out
 

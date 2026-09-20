@@ -6,3 +6,5 @@ include tests/Dockerfile.compat
 recursive-exclude * *.bak*
 recursive-include scripts *.sh
 include tests/Dockerfile.install
+recursive-include napback/web *.html *.css *.js
+recursive-include tests *.py

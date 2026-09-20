@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Napback · Deine NAS-Backups</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <aside class="sidebar">
+      <a class="brand" href="#"
+        ><span class="logo">N</span
+        ><span>Napback<small>Deine NAS-Backups</small></span></a
+      >
+      <nav aria-label="Hauptnavigation">
+        <button id="nav-setup" class="nav active">Einrichten</button
+        ><button id="nav-status" class="nav">Meine Backups</button
+        ><button id="nav-restore" class="nav">
+          Wiederherstellung verstehen
+        </button>
+      </nav>
+      <div class="local">
+        <span class="dot"></span> Läuft auf Deinem PC<small
+          >Die Oberfläche ist nur auf diesem PC erreichbar.</small
+        ><span id="version"></span>
+      </div>
+    </aside>
+    <main>
+      <header>
+        <div>
+          <div class="eyebrow">DEIN NAS. DEINE DATEN.</div>
+          <h1 id="title">Backups, die Du verstehst.</h1>
+          <p id="subtitle">
+            Wähle Deine Daten. Sieh, was gesichert wird. Entscheide dann.
+          </p>
+        </div>
+        <span class="pill">Lokal · Ohne Cloud</span>
+      </header>
+      <div id="notice" role="status" aria-live="polite" hidden></div>
+      <div id="busy" role="status" aria-live="polite" hidden>
+        <span class="spinner"></span><span id="busy-text">Wird geprüft …</span>
+      </div>
+      <div id="error" role="alert" hidden>
+        <strong id="error-text"></strong>
+        <details>
+          <summary>Technische Details</summary>
+          <pre id="error-detail"></pre>
+        </details>
+      </div>
+      <section id="setup">
+        <ol class="steps" aria-label="Einrichtungsschritte">
+          <li class="active" data-step="0"><span>1</span>NAS verbinden</li>
+          <li data-step="1"><span>2</span>Daten auswählen</li>
+          <li data-step="2"><span>3</span>Auf dem PC speichern</li>
+          <li data-step="3"><span>4</span>Prüfen & speichern</li>
+        </ol>
+        <div class="layout">
+          <div class="content">
+            <section class="card step" id="step-0">
+              <div class="section-tag">SCHRITT 1 VON 4</div>
+              <h2>Wo steht Dein NAS?</h2>
+              <p>
+                Dein PC verbindet sich mit TrueNAS und liest zuerst nur die
+                Liste Deiner Daten und Snapshots.
+              </p>
+              <form id="connect-form">
+                <div class="form-grid">
+                  <label
+                    >NAS-Adresse<input
+                      id="address"
+                      autocomplete="off"
+                      placeholder="192.168.1.10"
+                      required
+                    /><small
+                      >Die Adresse Deiner TrueNAS-Webseite, ohne
+                      https://.</small
+                    ></label
+                  ><label
+                    >Benutzer auf TrueNAS<input
+                      id="username"
+                      autocomplete="username"
+                      placeholder="backup"
+                    /><small
+                      >Der Benutzer, mit dem Du auf dem NAS zugreifen
+                      darfst.</small
+                    ></label
+                  >
+                </div>
+                <label
+                  >SSH-Schlüssel auf Deinem PC<select id="key-choice">
+                    <option value="">Automatisch finden</option>
+                    <option value="custom">
+                      Andere Schlüsseldatei …
+                    </option></select
+                  ><small
+                    >Damit meldet sich Napback ohne Passwortabfrage an. Der
+                    private Schlüssel bleibt auf Deinem PC.</small
+                  ></label
+                >
+                <label id="key-custom-row" hidden
+                  >Schlüsseldatei<input
+                    id="key-custom"
+                    placeholder="~/.ssh/id_ed25519_nas"
+                  /><small
+                    >Den Dateipfad wählen, nicht den Inhalt einer Schlüsseldatei
+                    einfügen.</small
+                  ></label
+                >
+                <label class="check"
+                  ><input id="sudo" type="checkbox" checked /><span
+                    >Administratorrechte für die Sicherung verwenden<small
+                      >Der NAS-Benutzer muss die nötigen Befehle ohne
+                      Passwortabfrage ausführen dürfen.</small
+                    ></span
+                  ></label
+                >
+                <details class="help">
+                  <summary>Was ist SSH? Wie richte ich den Zugang ein?</summary>
+                  <p>
+                    SSH ist eine verschlüsselte Verbindung zwischen Deinem PC
+                    und dem NAS. Napback nutzt sie, um die Daten abzuholen.
+                  </p>
+                  <ol>
+                    <li>
+                      TrueNAS: Unter <b>System → Services</b> den Dienst
+                      <b>SSH</b> einschalten.
+                    </li>
+                    <li>
+                      Unter <b>Credentials → Users</b> Deinen Benutzer öffnen.
+                      SSH-Zugang erlauben und den <b>öffentlichen</b> Schlüssel
+                      aus der .pub-Datei eintragen.
+                    </li>
+                    <li>
+                      Der private Schlüssel ohne .pub bleibt auf dem PC. Wähle
+                      seinen Pfad oben.
+                    </li>
+                  </ol>
+                  <p>
+                    Falls Dein PC den NAS-Schlüssel noch nicht kennt, musst Du
+                    den Server-Fingerabdruck einmal prüfen. Eine geänderte
+                    Identität wird nicht automatisch akzeptiert.
+                  </p>
+                  <label
+                    >Vorhandenen SSH-Alias verwenden<input
+                      id="alias"
+                      placeholder="Optional, z. B. mein-nas"
+                    /><small
+                      >Nur nötig, wenn Du bereits einen Namen in Deiner
+                      SSH-Konfiguration eingerichtet hast.</small
+                    ></label
+                  >
+                </details>
+                <div class="actions">
+                  <button type="submit" class="primary" id="connect-button">
+                    Verbindung prüfen & Daten anzeigen <span>→</span>
+                  </button>
+                </div>
+              </form>
+            </section>
+            <section class="card step" id="step-1" hidden>
+              <div class="section-tag">SCHRITT 2 VON 4</div>
+              <h2>Was möchtest Du sichern?</h2>
+              <p>
+                Hake die gewünschten Datenbereiche an. Ein Haken beim
+                Elternbereich nimmt die Bereiche darunter mit. Du kannst
+                einzelne Bereiche wieder abwählen.
+              </p>
+              <div class="info">
+                Ein <b>Snapshot</b> hält den Datenstand zu einem bestimmten
+                Zeitpunkt fest. Napback holt den neuesten passenden Stand
+                automatisch ab. Du musst keinen Snapshot-Namen eintippen.
+              </div>
+              <div class="toolbar">
+                <label class="search-label"
+                  >Datenbereiche finden<input
+                    id="search"
+                    type="search"
+                    placeholder="Suchen, z. B. Apps oder HAOS" /></label
+                ><button id="reload" class="secondary">NAS neu lesen</button>
+              </div>
+              <div id="dataset-tree" class="dataset-tree"></div>
+              <div id="selection-note" class="selection-note"></div>
+              <div id="selection-report"></div>
+              <details class="help">
+                <summary>
+                  Was ist mit ausgeschlossenen Bereichen und neuen Daten?
+                </summary>
+                <p>
+                  Ein bestehender TrueNAS-Auftrag kann Bereiche auslassen.
+                  Solche Hinweise zeigt Napback neben den betroffenen Bereichen.
+                  Es übernimmt diese Ausschlüsse nicht heimlich: Du bestimmst
+                  mit den Haken, was gesichert wird.
+                </p>
+                <p>
+                  Neue Unterbereiche einer gespeicherten Auswahl werden künftig
+                  mit aufgenommen, sofern sie nicht unter einem ausgeschlossenen
+                  Bereich liegen. Fehlen dafür Snapshots oder die passende
+                  Verschlüsselung, bricht die Sicherung mit einem Fehler ab.
+                </p>
+              </details>
+              <div class="actions">
+                <button class="secondary back" data-to="0">Zurück</button
+                ><button class="primary" id="to-storage">
+                  Auswahl prüfen & weiter →
+                </button>
+              </div>
+            </section>
+            <section class="card step" id="step-2" hidden>
+              <div class="section-tag">SCHRITT 3 VON 4</div>
+              <h2>Wo sollen Deine Backups liegen?</h2>
+              <p>
+                Wähle einen Ordner auf Deinem Linux-PC oder einer
+                angeschlossenen Festplatte.
+              </p>
+              <label
+                >Zielordner
+                <div class="input-action">
+                  <input
+                    id="target"
+                    placeholder="/mnt/backup/NAS"
+                    required
+                  /><button id="choose-folder" class="secondary">
+                    Ordner auswählen
+                  </button>
+                </div>
+                <small
+                  >Der Ordner muss neu oder leer sein. Eine bestehende
+                  Napback-Sicherung kann am bisherigen Ort weiterlaufen.</small
+                ></label
+              >
+              <div class="choice-grid">
+                <label class="choice"
+                  ><input
+                    type="radio"
+                    name="storage"
+                    value="zfs_raw"
+                    checked
+                  /><span
+                    ><b>Verschlüsselt aufbewahren</b
+                    ><em>Empfohlen für verschlüsselte NAS-Daten</em
+                    ><small
+                      >Die vorhandene ZFS-Verschlüsselung bleibt erhalten. Auf
+                      dem PC liegen verschlüsselte Archivdateien. Du brauchst
+                      kein LUKS und kein ZFS auf dem PC.</small
+                    ></span
+                  ></label
+                ><label class="choice"
+                  ><input type="radio" name="storage" value="files" /><span
+                    ><b>Als lesbare Dateien speichern</b
+                    ><em>Unverschlüsselt auf Deinem PC</em
+                    ><small
+                      >Du kannst die Dateien direkt ansehen. Die Verschlüsselung
+                      des NAS wird dabei nicht übernommen.</small
+                    ></span
+                  ></label
+                >
+              </div>
+              <div class="info" id="encryption-note">
+                <b>Für die Wiederherstellung:</b> Du brauchst ein ZFS-System,
+                etwa TrueNAS, und die ursprünglichen ZFS-Schlüssel. Bewahre
+                diese separat auf. Ein SSH-Schlüssel ersetzt den ZFS-Schlüssel
+                nicht.
+              </div>
+              <div class="form-grid">
+                <label
+                  >Nach neuen Snapshots schauen<input
+                    id="minutes"
+                    type="number"
+                    min="1"
+                    max="1440"
+                    value="1"
+                  /><small
+                    >Alle so viele Minuten, solange der PC läuft. Ohne neuen
+                    Snapshot wird nichts kopiert.</small
+                  ></label
+                ><label
+                  >Gespeicherte Stände behalten<input
+                    id="keep"
+                    type="number"
+                    min="0"
+                    value="30"
+                  /><small
+                    >Ältere Stände werden nach einer erfolgreichen Sicherung
+                    entfernt. 0 bedeutet: alle behalten.</small
+                  ></label
+                >
+              </div>
+              <label class="check"
+                ><input id="automatic" type="checkbox" checked /><span
+                  >Backups automatisch abholen<small
+                    >Startet bei Deiner Anmeldung. Nach Standby wird beim
+                    nächsten Check der neueste Stand abgeholt. Der PC wird dafür
+                    nicht aufgeweckt.</small
+                  ></span
+                ></label
+              >
+              <div class="actions">
+                <button class="secondary back" data-to="1">Zurück</button
+                ><button class="primary" id="review-button">
+                  Alles prüfen & Zusammenfassung zeigen →
+                </button>
+              </div>
+            </section>
+            <section class="card step" id="step-3" hidden>
+              <div class="section-tag">SCHRITT 4 VON 4</div>
+              <h2>Das wird eingerichtet.</h2>
+              <p>
+                Bis hier wurde keine Backup-Konfiguration geändert. Prüfe jetzt
+                Quelle, Ziel und Umfang.
+              </p>
+              <div id="review-content"></div>
+              <div class="actions">
+                <button class="secondary back" data-to="2">
+                  Zurück & ändern</button
+                ><button class="primary" id="save-button">
+                  Einstellungen speichern
+                </button>
+              </div>
+            </section>
+          </div>
+          <aside class="explanation">
+            <div class="section-tag">WAS PASSIERT DABEI?</div>
+            <h3 id="explain-title"></h3>
+            <p id="explain-text"></p>
+            <div class="flow">
+              <div>
+                <span class="flow-icon">01</span><b>TrueNAS</b
+                ><small>Deine Daten + Snapshots</small>
+              </div>
+              <div class="flow-line">↓ verschlüsselte Verbindung</div>
+              <div>
+                <span class="flow-icon">02</span><b>Dein Linux-PC</b
+                ><small>Holt neue Stände ab</small>
+              </div>
+            </div>
+            <p class="footnote">
+              Schließt Du die Oberfläche, laufen eingerichtete automatische
+              Backups weiter.
+            </p>
+          </aside>
+        </div>
+      </section>
+      <section id="dashboard" hidden>
+        <div id="dashboard-content"></div>
+      </section>
+      <section id="restore" class="card" hidden>
+        <div class="section-tag">WIEDER AN DEINE DATEN KOMMEN</div>
+        <h2>Was brauche ich zur Wiederherstellung?</h2>
+        <p>Das hängt davon ab, wie Du die Backups gespeichert hast.</p>
+        <div class="choice-grid">
+          <div class="info">
+            <h3>Verschlüsselte Archive</h3>
+            <p>
+              Die .zfs-Dateien enthalten Deine Daten in verschlüsselter Form.
+              Zum Lesen werden sie auf TrueNAS oder einem anderen ZFS-System in
+              <b>neue Datasets</b> zurückgespielt und mit Deinen ursprünglichen
+              ZFS-Schlüsseln entsperrt.
+            </p>
+            <p>
+              Du brauchst: die vollständige lokale Sicherung, ein ZFS-Ziel mit
+              genug Platz und die ursprünglichen Schlüssel.
+            </p>
+          </div>
+          <div class="info">
+            <h3>Lesbare Dateien</h3>
+            <p>
+              Die Daten können aus einer Sicherung in einen neuen, leeren Ordner
+              kopiert werden. Ändere Dateien innerhalb der Sicherung nicht:
+              Mehrere Stände können dieselben Dateien gemeinsam verwenden.
+            </p>
+          </div>
+        </div>
+        <div class="warning">
+          <b>Ein Dataset-Backup ersetzt kein vollständiges NAS-Backup.</b>
+          <p>
+            TrueNAS-Konfiguration, ZFS-Schlüssel und Bootfähigkeit sind separat.
+            Sichere die TrueNAS-Konfiguration inklusive „Export Password Secret
+            Seed“. Eine kaputte Bootplatte ersetzt Du durch eine Neuinstallation
+            und das Einspielen dieser Konfiguration.
+          </p>
+        </div>
+        <p>
+          Diese Oberfläche richtet Backups ein und prüft sie. Die
+          Wiederherstellung erfolgt bisher über Napbacks vorhandene Befehle.
+        </p>
+        <details class="help">
+          <summary>Befehle zur Wiederherstellung</summary>
+          <p>Zuerst die Integrität prüfen:</p>
+          <pre>napback verify</pre>
+          <p>
+            Verschlüsselt: in ein neues Dataset auf dem konfigurierten NAS
+            zurückspielen:
+          </p>
+          <pre>napback restore-zfs POOL/NEUES-DATASET --source QUELLENNAME</pre>
+          <p>Quelldaten-Namen anzeigen:</p>
+          <pre>napback list</pre>
+          <p>
+            Lesbare Dateien: in einen neuen oder leeren PC-Ordner
+            wiederherstellen:
+          </p>
+          <pre>napback restore /PFAD/ZUM/NEUEN-ORDNER</pre>
+        </details>
+      </section>
+      <footer>
+        Napback <span id="footer-version"></span> · Deine Einstellungen bleiben
+        auf Deinem PC.
+      </footer>
+    </main>
+    <dialog id="folder-dialog">
+      <div class="dialog-head">
+        <h2>Zielordner auswählen</h2>
+        <button id="close-folder" class="secondary" aria-label="Schließen">
+          Schließen
+        </button>
+      </div>
+      <div class="toolbar">
+        <button id="folder-up" class="secondary">↑ Übergeordneter Ordner</button
+        ><button id="folder-home" class="secondary">Persönlicher Ordner</button
+        ><button id="folder-mnt" class="secondary">/mnt</button>
+      </div>
+      <p id="folder-current" class="mono"></p>
+      <div id="folder-list"></div>
+      <label
+        >Neuer Backup-Unterordner<input
+          id="folder-name"
+          value="NAS-Backup"
+        /><small
+          >Wird erst beim Speichern erstellt. Leer lassen, um den angezeigten
+          Ordner selbst zu verwenden.</small
+        ></label
+      ><button id="folder-use" class="primary">
+        Diesen Speicherort verwenden
+      </button>
+    </dialog>
+    <dialog id="snapshot-dialog">
+      <div class="dialog-head">
+        <h2>Vorhandene Snapshots</h2>
+        <button id="close-snapshots" class="secondary">Schließen</button>
+      </div>
+      <div id="snapshot-list"></div>
+    </dialog>
+  </body>
+</html>

@@ -38,7 +38,7 @@ def unit_quote(value):
     )
 
 
-def unit_contents(config_path):
+def unit_contents(config_path, unit_prefix="napback"):
     executable = Path(sys.executable).absolute()
     command = f"{unit_quote(executable)} -m napback --config {unit_quote(config_path.absolute())} run --scheduled"
     service = f"""[Unit]
@@ -56,7 +56,7 @@ IOSchedulingPriority=7
 UMask=0077
 NoNewPrivileges=true
 """
-    timer = """[Unit]
+    timer = f"""[Unit]
 Description=Check whether a Napback backup is due after boot, resume and each minute
 
 [Timer]
@@ -64,7 +64,7 @@ OnStartupSec=30s
 OnCalendar=*-*-* *:*:00
 Persistent=true
 AccuracySec=10s
-Unit=napback.service
+Unit={unit_prefix}.service
 
 [Install]
 WantedBy=timers.target
@@ -72,16 +72,16 @@ WantedBy=timers.target
     return service, timer
 
 
-def install_timer(config_path):
+def install_timer(config_path, unit_prefix="napback"):
     core.Config.load(config_path)
     root = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "systemd/user"
     root.mkdir(parents=True, exist_ok=True)
-    for suffix, contents in zip(("service", "timer"), unit_contents(config_path)):
-        path = root / f"napback.{suffix}"
+    for suffix, contents in zip(("service", "timer"), unit_contents(config_path, unit_prefix)):
+        path = root / f"{unit_prefix}.{suffix}"
         backup_existing(path)
         path.write_text(contents)
     core.command(["systemctl", "--user", "daemon-reload"])
-    core.command(["systemctl", "--user", "enable", "--now", "napback.timer"])
+    core.command(["systemctl", "--user", "enable", "--now", f"{unit_prefix}.timer"])
     return {
         "status": "timer_enabled",
         "units": str(root),
@@ -102,8 +102,14 @@ def main(argv=None):
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("--config", type=Path, default=default_config())
     commands = parser.add_subparsers(dest="action", required=True)
-    setup_parser = commands.add_parser("setup", help="Guided TrueNAS setup with inline help")
+    setup_parser = commands.add_parser("setup", help="Open the local browser setup")
     setup_parser.add_argument("--language", choices=("de", "en"), default="de")
+    setup_parser.add_argument(
+        "--terminal", action="store_true", help="Use the legacy terminal wizard"
+    )
+    commands.add_parser("ui", help="Open the local backup interface in your browser")
+    serve_parser = commands.add_parser("serve", help="Run the local browser interface server")
+    serve_parser.add_argument("--port", type=int, default=0)
     commands.add_parser("tray", help="Show background status in the desktop system tray")
     commands.add_parser(
         "install-tray", help="Install and start the desktop tray with login autostart"
@@ -158,7 +164,20 @@ def main(argv=None):
         elif args.action == "init":
             result = core.initialize(args.target, storage=args.storage)
         elif args.action == "setup":
-            result = setup(args.config, language=args.language)
+            if args.terminal:
+                result = setup(args.config, language=args.language)
+            else:
+                from .webapp import open_ui
+
+                result = open_ui(args.config)
+        elif args.action == "ui":
+            from .webapp import open_ui
+
+            result = open_ui(args.config)
+        elif args.action == "serve":
+            from .webapp import serve
+
+            result = serve(args.config, port=args.port)
         elif args.action == "install-timer":
             result = install_timer(args.config)
         else:

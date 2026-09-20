@@ -55,6 +55,8 @@ def test_desktop_install_is_separate_from_backup_worker(tmp_path, monkeypatch):
     assert not any("napback.timer" in call for call in calls)
     desktop = tmp_path / "config/autostart/napback.desktop"
     assert desktop.exists() and "napback-tray.service" in desktop.read_text()
+    launcher = tmp_path / "data/applications/napback.desktop"
+    assert " ui\n" in launcher.read_text()
 
 
 def test_headless_install_prepares_autostart_without_a_user_bus(tmp_path, monkeypatch):

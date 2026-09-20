@@ -1,5 +1,24 @@
 # Validation record
 
+## Version 0.4: local browser interface
+
+On CachyOS, **121 tests passed**, including all three Chromium browser tests.
+
+The new interface was tested with synthetic NAS metadata and real Chromium:
+dataset selection, actual snapshot names, missing-snapshot errors, explicit
+exclusions, navigating back, folder selection, review, config save, reload and a
+390-pixel mobile viewport. No browser JavaScript errors occurred. API tests cover
+token authentication, Origin/Host restrictions, review tokens, changed configs,
+repository identity preservation, config backups and separate timers for custom
+jobs. Invalid exclusions and unsupported volume selections are rejected.
+
+The installed 0.4 interface was also driven through Chromium against the real
+isolated encrypted TrueNAS parent/child fixture. It discovered metadata over SSH,
+saved a separate configuration, started an independent background backup and
+verified the resulting encrypted archive. No production data was transferred and
+no NAS settings or snapshot tasks were modified. Screenshots were inspected for
+layout; this does not validate every browser or screen reader.
+
 ## Version 0.3.2: shorter setup instructions
 
 Validated on 2026-09-20: **101 tests passed** locally. The wizard displays short

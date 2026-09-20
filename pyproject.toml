@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "napback"
-version = "0.3.2"
+version = "0.4.0"
 description = "Pull versioned NAS backups when your Linux PC is awake"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,6 +20,9 @@ napback = "napback.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["napback*"]
+
+[tool.setuptools.package-data]
+napback = ["web/*.html", "web/*.css", "web/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

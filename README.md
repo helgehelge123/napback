@@ -42,6 +42,7 @@ cannot be mistaken for an encrypted archive. See [migration](docs/encryption.md)
 - Fresh full stream when a base snapshot disappears or a chain reaches its limit.
 - Atomic publication after every source completes and local readback verifies.
 - SHA-256 inventory, explicit verification, failed-transfer retry and one writer at a time.
+- Local browser setup with real snapshot examples, dataset checkboxes, explicit exclusions and saved configuration.
 - KDE-compatible system tray with status, check now, folder, interval, setup and logs.
 - Python standard-library engine; optional PyQt6 tray. MIT licensed, no cloud account.
 
@@ -63,7 +64,8 @@ Zvols are not supported.
 on the NAS. Source files must be unlocked and readable.
 
 TrueNAS periodic snapshot tasks should cover selected children recursively.
-The default snapshot prefix is `auto-`, with a maximum age of 48 hours. Napback
+The browser setup considers all snapshot names, with a maximum age of 48 hours.
+Existing configurations keep their prefix; the terminal/manual default remains `auto-`. Napback
 never creates, deletes or holds source snapshots. Database workloads may need
 application-consistent dumps or coordinated snapshots; Napback does not pause apps.
 
@@ -93,27 +95,34 @@ backup job; the initial tray state is “Not configured”.
 
 ## Configure and run
 
-Start the guided setup (German by default, English available):
+Open **Napback** from your application menu, double-click its tray icon, or run:
 
 ```sh
 napback setup
-napback setup --language en  # Use this instead for English
 ```
 
-Each question shows a short action hint; `?` opens detailed TrueNAS help.
-Enter dataset names without `/mnt/`, for example `Apps` rather than `/mnt/Apps`.
-“SSH host” means `user@NAS-address`, such as `backup@192.168.1.10`, or an existing
-SSH alias. A separate field accepts the private SSH key's **path on the PC**;
-the matching public key belongs in the TrueNAS user's settings. Setup explains
-SSH access, passwordless sudo, dataset names, snapshot tasks and prefixes, local
-storage, encryption and the minutes interval. Verify the NAS host key through a
-trusted channel before accepting the first SSH connection.
+Version 0.4 opens a local browser interface with four steps:
 
-Invalid field values can be corrected directly. Sources and existing snapshots
-are validated before saving a configuration or creating a repository. Setup
-then offers to enable the background timer. Accept `zfs_raw` to preserve
-encryption. See [TrueNAS details](docs/truenas.md) and
-[manual configuration](docs/configuration.md) for additional options.
+1. Connect to the NAS using separate address, username and SSH-key fields.
+2. Choose datasets with checkboxes. Expand children, inspect actual snapshot names
+   and dates, and explicitly deselect areas you do not want to back up.
+3. Choose a PC folder, storage mode, polling interval and retention.
+4. Review the exact scope, exclusions, target and encryption before saving.
+
+The interface chooses the newest common snapshot automatically; no prefix needs
+to be guessed. Missing snapshots, unencrypted sources and unsupported virtual
+disks are shown before saving. Nothing on the NAS is modified by setup. A
+successful save writes the real config, backs up an existing config, and enables
+or disables the job's timer as selected. The dashboard shows backup status and
+can start a check or verify the last archive. Closing the browser leaves the
+independent backup worker running.
+
+The interface is German and binds only to `127.0.0.1`. It has no external assets
+or cloud service. Access to settings requires a local session token; other web
+origins cannot change the configuration. `napback ui` reopens it. The old terminal
+wizard remains available with `napback setup --terminal` (add `--language en` for
+English). See [browser guide](docs/web-interface.md) and
+[manual configuration](docs/configuration.md).
 
 ```sh
 napback plan           # Inspect selected snapshots; no transfer

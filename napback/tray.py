@@ -186,10 +186,7 @@ class TrayController:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.config.target)))
 
     def open_config(self):
-        if self.config_path.exists():
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.config_path)))
-        else:
-            self.setup()
+        self.setup()
 
     def change_interval(self):
         if not self.config:
@@ -225,7 +222,9 @@ class TrayController:
         )
 
     def setup(self):
-        self.terminal([sys.executable, "-m", "napback", "--config", str(self.config_path), "setup"])
+        QProcess.startDetached(
+            sys.executable, ["-m", "napback", "--config", str(self.config_path), "ui"]
+        )
 
     def show_logs(self):
         self.terminal(
@@ -244,7 +243,7 @@ class TrayController:
 
     def activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            self.open_folder()
+            self.setup()
 
 
 def update_interval(config_path, minutes):

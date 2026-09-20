@@ -5,21 +5,34 @@ Use `napback --config /absolute/path/config.json COMMAND` for another job.
 The installer creates one timer for one configuration; multiple independent jobs
 can use separately named units generated from the supplied unit structure.
 
-## Guided setup
+## Browser setup
 
-Run `napback setup` for German guidance or `napback setup --language en` for
-English. Each field shows a short action hint; `?` opens detailed help with the relevant
-TrueNAS settings. Dataset names are entered without the `/mnt/` filesystem prefix. The wizard accepts `user@NAS-address` or an SSH
-alias, with an optional separate private-key path. An explicit key path becomes
-`ssh_options: ["-i", "/absolute/path/to/key", "-oIdentitiesOnly=yes"]`; the key
-contents are never copied into the configuration. Leaving it blank preserves
-normal SSH key/alias discovery.
+`napback setup` and `napback ui` open the local browser interface. It writes this
+same configuration after a successful review; existing configs are backed up.
+See [the interface guide](web-interface.md). The graphical setup stores
+`snapshot_prefix: ""`, letting the engine select the newest common snapshot
+without requiring a naming convention. Snapshot freshness checks remain active.
 
-The snapshot-prefix field accepts `*` for all names (saved as `""`). Other
-prefixes are literal name beginnings, not naming templates or regular
-expressions. The wizard validates access and snapshot availability before
-creating a repository or replacing the configuration. Existing configurations
-are backed up beside the original.
+Deselecting a child produces an explicit per-source `exclude` list. Entries are
+full child dataset names and exclude their descendants as well. The parent itself
+cannot be excluded. Example:
+
+```json
+{"name": "apps", "dataset": "tank/apps", "recursive": true,
+ "exclude": ["tank/apps/cache"]}
+```
+
+The final review lists exclusions. They are not silently inherited from TrueNAS
+snapshot tasks. Future children remain included unless beneath an excluded path.
+Changes to exclusions affect the configuration fingerprint and trigger a new
+backup. `recursive: false` and ordinary path sources cannot use `exclude`.
+
+Separate custom configuration paths opened in the browser use separate timer
+names derived from the config path. The default job still uses `napback.timer`.
+
+The terminal wizard remains available with `napback setup --terminal`, or
+`napback setup --terminal --language en`. `?` opens detailed field help. Its
+snapshot prefix still defaults to `auto-`; `*` means all names.
 
 ## Manual setup
 
@@ -90,8 +103,8 @@ that actually contains the target. Repository paths must not contain symlinks.
 
 Source names use letters, digits, dot, underscore and dash, starting with a
 letter or digit. They become directory names under `data/`. Source path entries
-accept `name` and `path`. ZFS entries accept `name`, `dataset` and `recursive`
-(default true). Unknown options are rejected to catch misspellings.
+accept `name` and `path`. ZFS entries accept `name`, `dataset`, `recursive`
+(default true), and `exclude` (default empty). Unknown options are rejected to catch misspellings.
 
 Changing source-related configuration makes a backup due immediately, even if a
 recent version exists. Retention, polling, trigger mode, interval, bandwidth and

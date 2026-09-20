@@ -36,10 +36,14 @@ Terminal=false
 Categories=Utility;Archiving;
 StartupNotify=false
 """
+    launcher = desktop.replace(
+        "Exec=systemctl --user start napback-tray.service",
+        f"Exec={unit_quote(executable)} -m napback --config {unit_quote(config_path.absolute())} ui",
+    ).replace("Comment=Watch NAS snapshot backups", "Comment=Configure and monitor NAS backups")
     for path, text in (
         (config_root / "systemd/user/napback-tray.service", unit),
         (config_root / "autostart/napback.desktop", desktop),
-        (data_root / "applications/napback.desktop", desktop),
+        (data_root / "applications/napback.desktop", launcher),
     ):
         path.parent.mkdir(parents=True, exist_ok=True)
         backup_existing(path)

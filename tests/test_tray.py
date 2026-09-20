@@ -83,3 +83,14 @@ def test_manual_check_uses_independent_service(application, configured):
 def test_german_labels():
     assert state_label("running", True) == "Sicherung läuft"
     assert "kein neuer Snapshot" in state_label("no_new_snapshot", True)
+
+
+def test_tray_setup_opens_browser_without_terminal(application, tmp_path):
+    path = tmp_path / "config.json"
+    tray = TrayController(path, start_timer=False)
+    try:
+        with patch("napback.tray.QProcess.startDetached") as start:
+            tray.setup()
+        assert start.call_args.args[1] == ["-m", "napback", "--config", str(path), "ui"]
+    finally:
+        tray.tray.hide()
