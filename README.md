@@ -4,10 +4,12 @@
 
 [Deutsche Kurzanleitung](docs/kurzanleitung.md) · [Configuration](docs/configuration.md) · [Validation](docs/testing.md)
 
-Napback runs quietly under systemd. It checks once a minute and starts a backup
-only when the last **successful** backup is at least 24 hours old. Missed work is
-caught up after login, boot with user lingering enabled, or resume. Failed runs
-remain due and are retried. Your PC does not need to stay on overnight.
+Napback checks for **new ZFS snapshots** while your Linux PC is awake. A new
+snapshot starts a backup without waiting 24 hours; unchanged snapshots are
+skipped. The polling interval is configurable in minutes during setup and from
+the system tray (default: one minute). After login, boot with user lingering
+enabled, or resume, the next check picks up the newest available snapshot.
+Failed transfers are retried. Your PC does not need to stay on overnight.
 
 On TrueNAS, Napback reads existing ZFS snapshots over SSH. An optional, short-lived
 Docker container supplies rsync on the NAS. The destination can be an ordinary
@@ -21,7 +23,10 @@ integrity inventories and recovery checks. See [validation](docs/testing.md).
 ## Features
 
 - Pull from the PC; no inbound PC port and no new NAS network listener.
-- Rolling 24-hour interval measured from successful completion, not a fixed hour.
+- New-snapshot detection using ZFS GUIDs, including replacements with the same name.
+- Configurable polling from 1 to 1440 minutes; no duplicate backup for an unchanged snapshot.
+- System tray status and actions on KDE Plasma and other compatible desktops.
+- Optional rolling interval mode for ordinary directory sources (default: 24 hours).
 - Automatic retry after missed schedules, disconnected storage, or network failure.
 - Recursive dataset discovery and the newest common ZFS snapshot across children.
 - Snapshot freshness checks; never silently fall back to the live dataset.
@@ -32,13 +37,16 @@ integrity inventories and recovery checks. See [validation](docs/testing.md).
 - User-mode operation on the PC. Privileged source metadata is stored with rsync
   `--fake-super` in extended attributes.
 - Interactive setup, status, restore and systemd installation commands.
-- Python standard library only. MIT licensed. No account or cloud service.
+- Python standard-library backup engine, optional PyQt6 tray. MIT licensed.
+  No account or cloud service.
 
 ## Requirements
 
 **PC:** Linux, Python 3.11+, rsync 3.2+, OpenSSH client, systemd, and a destination
 with working hard links and user extended attributes, such as ext4, XFS or Btrfs.
 `napback init` probes both. FAT/exFAT and generic network shares are unsuitable.
+The tray additionally requires PyQt6 and a desktop with a StatusNotifierItem or
+system tray host. KDE Plasma is supported; GNOME may need a tray extension.
 
 **NAS:** working key-based SSH with a verified host key. For ZFS sources, `zfs`
 and access to the requested snapshots. For direct transfers, rsync; alternatively
@@ -52,7 +60,8 @@ Napback does not pause apps or perform database dumps.
 
 ## Install
 
-Install your distribution's Python, rsync and OpenSSH packages, then:
+Download and extract the source archive from
+[Releases](https://github.com/helgehelge123/napback/releases), or clone using Git:
 
 ```sh
 git clone https://github.com/helgehelge123/napback.git
@@ -64,10 +73,24 @@ The installer creates an isolated environment under `~/.local/share/napback` and
 an executable at `~/.local/bin/napback`. Existing installation files are backed
 up beside the originals. Ensure `~/.local/bin` is in your PATH.
 
+Missing Python/venv, rsync, OpenSSH, systemd and Qt runtime packages are installed
+automatically using `pacman` (Arch/CachyOS), `apt-get` (Debian/Ubuntu), or `dnf`
+(Fedora). Run the installer as your normal user; it uses `sudo` only for missing
+system packages and may ask for your password. Python 3.11+ is required; older
+distribution Python versions must be upgraded first. PyQt6 is installed in the
+private environment. The tray starts immediately in a graphical session and
+automatically at subsequent desktop logins. Without a configuration it shows
+“Not configured”; installation alone does not activate a backup job.
+
+Use `./install.sh --cli-only` on machines where you do not want the tray or its
+GUI dependencies. On unsupported distributions, install the requirements with
+your package manager before running the installer.
+
 Alternatively, with [uv](https://docs.astral.sh/uv/):
 
 ```sh
-uv tool install .
+uv tool install '.[tray]'
+napback install-tray
 ```
 
 Before setup, configure an SSH alias and verify the NAS host key through a trusted
@@ -88,15 +111,16 @@ not automatically trust a new host key or store passwords.
 napback setup
 ```
 
-Setup lists ZFS filesystems, asks for datasets and a destination, validates the
-available snapshots and offers to enable the background timer. Child datasets
-are included by default. The target must be new or empty. For explicit source
+Setup lists ZFS filesystems, asks for datasets, a destination and a polling
+interval in minutes, validates the available snapshots and offers to enable the
+background timer. Child datasets are included by default. The target must be
+new or empty. For explicit source
 names, custom intervals or non-ZFS paths, use [manual configuration](docs/configuration.md).
 
 ```sh
 napback plan          # Show exactly which snapshots would be read
-napback run           # Back up if due; otherwise do nothing
-napback run --force   # Explicitly create a new backup now
+napback run           # Check now; copy only a new snapshot (or a due interval job)
+napback run --force   # Explicitly allow another copy of the same snapshot
 napback status
 napback list
 napback verify        # Read and check the latest local backup without NAS access
@@ -109,10 +133,18 @@ login, enable lingering once (your distribution may ask for authorization):
 loginctl enable-linger "$USER"
 ```
 
-The minute timer only checks whether work is due. It does not create a backup
-every minute and does not wake a sleeping PC. Calendar timers catch up after
-resume; `Persistent=true` catches up when the user service manager restarts.
-A backup in progress may fail after a long suspend; the next check retries it.
+The minute timer observes the configured polling interval before contacting the
+NAS. It does not create a backup every minute and does not wake a sleeping PC.
+Calendar timers catch up after resume; `Persistent=true` catches up when the user
+service manager restarts. Polling is approximate, with up to another timer tick
+of delay. A backup in progress may fail after a long suspend; the next check
+retries it. Only the newest common snapshot is selected, not every intermediate
+snapshot created while the PC was offline.
+
+The tray shows checks, transfers, success and errors. Its menu provides “Check
+now”, the backup folder, configuration, setup, logs and a minutes interval dialog.
+Closing the tray leaves the independent background worker running. The tray
+itself does not enable a disabled backup timer.
 
 ```sh
 systemctl --user status napback.timer napback.service
@@ -140,6 +172,13 @@ sender protects against accidental writes by the transfer process; it does **not
 turn an administrator SSH key into a read-only key. See [security](SECURITY.md).
 
 ## Browse and restore
+
+**Encryption:** SSH encrypts transport. Native ZFS encryption is **not inherited**:
+the NAS must expose unlocked, readable snapshot files, and Napback writes ordinary
+files on the PC. For encryption at rest, choose an already encrypted destination
+filesystem, for example a mounted LUKS volume. Napback does not create, unlock or
+format encrypted volumes. No native ZFS dataset or encrypted ZFS send stream is
+stored on the PC.
 
 ```text
 backup-directory/
@@ -197,7 +236,8 @@ automatic deletion. Failed transfers never rotate completed backups away.
   not blocks inside modified files. Sparse files are transferred sparsely.
 - Backups are not encrypted at rest by Napback. Use an encrypted destination
   filesystem if required. SSH encrypts transport.
-- CLI and systemd integration; no graphical interface or desktop notifications.
+- The tray is a small status/menu interface; dataset selection remains a terminal
+  setup assistant.
 
 ## Existing projects
 
@@ -214,7 +254,7 @@ local directories. See [research notes](docs/research.md).
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install -e . pytest
+python -m pip install -e '.[tray]' pytest
 python -m pytest -q
 ```
 

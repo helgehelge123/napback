@@ -25,6 +25,8 @@ Minimal ZFS configuration:
   "mountpoint": "/mnt/backup-disk",
   "host": "my-nas",
   "sudo": true,
+  "trigger": "new_snapshot",
+  "check_interval_minutes": 1,
   "sources": [
     {"name": "documents", "dataset": "tank/documents", "recursive": true}
   ]
@@ -51,7 +53,9 @@ that actually contains the target. Repository paths must not contain symlinks.
 | `repository_id` | required | UUID returned by `init` |
 | `mountpoint` | required | Expected filesystem mountpoint returned by `init` |
 | `sources` | required | One or more named path or dataset sources |
-| `interval_hours` | `24` | Hours since last successful completion, minimum 1 |
+| `trigger` | `"auto"` | `new_snapshot` copies changed ZFS snapshot GUIDs; `interval` uses elapsed time; `auto` chooses snapshots when every source is a dataset, otherwise interval |
+| `check_interval_minutes` | `1` | Polling interval in whole minutes, from 1 to 1440 |
+| `interval_hours` | `24` | Only in interval mode: hours since last successful completion, minimum 1 |
 | `keep` | `30` | Successful versions to retain; `0` keeps all |
 | `min_free_bytes` | `1073741824` | Free-space threshold before starting; not a size reservation |
 | `verify` | `true` | Compare transferred files to the source using rsync checksums before publication |
@@ -71,9 +75,24 @@ accept `name` and `path`. ZFS entries accept `name`, `dataset` and `recursive`
 (default true). Unknown options are rejected to catch misspellings.
 
 Changing source-related configuration makes a backup due immediately, even if a
-recent version exists. Retention, interval, bandwidth and free-space changes do
-not by themselves force another transfer. A clock more than five minutes behind
-the previous success makes a new backup due instead of postponing it indefinitely.
+recent version exists. Retention, polling, trigger mode, interval, bandwidth and
+free-space changes do not by themselves force another transfer. In interval
+mode, a clock more than five minutes behind the previous success makes a new
+backup due instead of postponing it indefinitely.
+
+In snapshot mode the latest common snapshot name and each dataset's GUID are
+compared with the last successful backup for this configuration. A change in any
+selected dataset triggers a complete new version; unchanged files still share
+space through hard links. An unchanged generation creates no new local version,
+even after 24 hours. Stale or missing source snapshots remain errors; a failed
+check never changes the last successful backup.
+
+`new_snapshot` requires dataset sources exclusively. Mixed dataset/path jobs use
+interval mode under `auto`, because plain paths have no snapshot GUID to watch.
+To retain version 0.1's daily behavior, explicitly set `"trigger": "interval"`.
+Otherwise old ZFS-only configurations automatically use the new behavior.
+Version 0.1 manifests lack GUIDs, so upgrading copies the selected generation
+once to establish the new baseline. Older local versions remain valid.
 
 `verify: false` disables the second source comparison only. File selection still
 uses checksums, and each backup still gets a SHA-256 inventory of local contents.
@@ -99,13 +118,30 @@ silently including mounted filesystems under a source; configure those separatel
 
 ## Background behavior
 
-The service is `Type=oneshot`; no Python daemon polls continuously. The user timer
-has `OnStartupSec=30s`, a minute calendar schedule, and `Persistent=true`.
-Napback reads completed manifests to decide whether a backup is due. A timer
+The backup service is `Type=oneshot`. The user timer has `OnStartupSec=30s`, a
+minute calendar schedule, and `Persistent=true`. It calls `run --scheduled`,
+which contacts the NAS only after `check_interval_minutes` since the previous
+check started. Long backups never overlap; failed attempts retry on a subsequent
+eligible tick. Rounding to timer ticks can add approximately another minute.
+Changing the interval in JSON or the tray takes effect without reinstalling the
+timer. `napback run` and the tray's “Check now” bypass the polling wait but still
+skip unchanged snapshots; only `--force` overrides that safeguard.
+
+Completed manifests determine the successful source generation. `last-check.json`
+records check/transfer state and errors for `napback status` and the tray. A timer
 activation, failed attempt or network connection is never considered a success.
+In snapshot mode `status.due` is `null`: status reads local state without making
+another NAS connection.
 
 On a PC with no user lingering, the user manager starts at login. To run before
 login as well, enable lingering using `loginctl enable-linger USER`. The timer
 does not wake the PC. Missed calendar events are handled on resume; an unavailable
-network is retried on the next minute. Inspect errors in the user journal and
-with `napback status`.
+network is retried at the next eligible check. Inspect errors in the user journal,
+the tray and with `napback status`.
+
+The optional `napback-tray.service` starts through desktop autostart. It reads
+local status every two seconds. Manual checks launch an independent transient
+user service so quitting the tray does not terminate a backup. Reinstalling or
+quitting the tray never stops the backup worker. Use `napback install-tray` to
+register the tray, or `napback --config /path/job.json install-tray` for a custom
+configuration (one installed tray entry per desktop user).

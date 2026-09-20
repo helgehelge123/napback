@@ -4,13 +4,16 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "napback"
-version = "0.1.0"
+version = "0.2.0"
 description = "Pull versioned NAS backups when your Linux PC is awake"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [{name = "Helge"}]
 classifiers = ["Operating System :: POSIX :: Linux", "Topic :: System :: Archiving :: Backup"]
+
+[project.optional-dependencies]
+tray = ["PyQt6>=6.6,<7"]
 
 [project.scripts]
 napback = "napback.cli:main"

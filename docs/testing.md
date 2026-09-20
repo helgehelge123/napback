@@ -1,17 +1,18 @@
 # Validation record
 
-Validation performed on 2026-09-20 for version 0.1.0. Tests use synthetic data;
+Validation performed on 2026-09-20 for version 0.2.0, building on the version 0.1
+transfer and recovery tests documented below. Tests use synthetic data;
 production applications were not stopped and production datasets were not copied
 or modified during validation.
 
 ## Automated suite
 
-- **47 tests passed** on CachyOS, Python 3.14.7, rsync 3.5.0.
-- **47 tests passed** in an Ubuntu 24.04 container, using the distribution's
+- **72 tests passed** on CachyOS, Python 3.14.7, rsync 3.5.0.
+- **72 tests passed** in an Ubuntu 24.04 container, using the distribution's
   Python 3.12 and rsync 3.2.7 packages, running as an unprivileged user.
-- Local statement coverage: **90% overall**, 90% core, 93% CLI, 97% inventory.
+- Version 0.1 statement coverage: **90% overall**, 90% core, 93% CLI, 97% inventory.
   The separate local transport subprocess is exercised but is not included in
-  that process's coverage measurements.
+  that process's coverage measurements. Coverage was not remeasured for 0.2.
 - Ruff checks and formatting pass. Generated systemd units pass
   `systemd-analyze --user verify`.
 
@@ -24,6 +25,28 @@ protection, interruption and retry, publication recovery, interrupted retention,
 clock corrections, recursive snapshot selection, missing child snapshots,
 source freshness, setup and installer behavior, and source-process timeouts.
 
+Version 0.2 adds unchanged-snapshot skipping beyond 24 hours, GUID changes without
+a name change, immediate new-generation backup, legacy-manifest upgrade, failed
+check retry, configurable polling boundaries, manual check bypass, status during
+an active backup, offscreen tray states/actions and interval edits with backups.
+
+## Installation and desktop checks
+
+- A clean Ubuntu 24.04 container started without Python, rsync, SSH or Qt.
+  `install.sh` installed the missing packages via `apt-get`, created the private
+  environment, loaded Qt offscreen and prepared desktop autostart without an
+  active user bus. The complete 72-test suite then passed as an unprivileged user.
+  The first attempt exposed a missing fontconfig library; the corrected package
+  dependency set passed the clean installation test.
+- The default installer completed on a real CachyOS/KDE Plasma desktop. The user
+  tray service ran and KDE's StatusNotifierWatcher registered the Napback item;
+  title, active state and unconfigured tooltip were read through D-Bus.
+- Automated package-manager dispatch tests cover pacman, apt-get and dnf using
+  fake executables. Fedora installation was **not** tested on a real Fedora system;
+  CachyOS already had the required system libraries.
+- GUI tests use Qt's offscreen backend. They are not a visual test of every desktop
+  shell. GNOME tray extensions and other desktop environments remain untested.
+
 Failure injection includes command failures representing a full disk, network
 loss and process interruption. A physically full filesystem and actual power
 loss were not induced. Those are simulation tests, not hardware tests.
@@ -33,7 +56,7 @@ loss were not induced. Those are simulation tests, not hardware tests.
 A dedicated synthetic ZFS parent dataset and child dataset were created on a
 TrueNAS SCALE host. A fixture included regular files, a root-owned 0600 file,
 a user xattr, a symlink, a FIFO, Unicode/newline filenames, and a 32 MiB random
-payload. Three recursive source snapshots were created while the live files
+payload. Four recursive source snapshots were created while the live files
 changed between generations.
 
 Verified end to end:
@@ -53,6 +76,11 @@ Verified end to end:
 7. Direct SSH transfer with the host's rsync 3.2.7 also completed and verified.
 8. A privileged restore with container rsync 3.5 restored uid 0, mode 0600,
    xattrs, the symlink and the FIFO.
+9. With the installed 0.2 client and an actual systemd test timer, a fourth
+   recursive snapshot was created while the latest backup was less than 24 hours
+   old. The timer detected the changed GUIDs, copied the new parent/child contents
+   and produced a valid SHA-256 inventory. A following check returned
+   `no_new_snapshot` without creating another version. The test timer was stopped.
 
 The compatibility test initially found incorrect local `-M` handling in older
 rsync builds. Napback now uses a local process transport for separate sender and
@@ -62,7 +90,8 @@ the tested Docker alternative.
 
 ## Real systemd checks
 
-A separate test user service and timer ran against synthetic local data:
+A separate test user service and timer exercised interval mode against synthetic
+local data in version 0.1:
 
 - Starting the timer triggered and completed a backup.
 - Only the test manifest's success timestamp was changed to 25 hours in the
@@ -78,12 +107,20 @@ unit configuration. The 24-hour comparison is tested at its exact boundary.
 ## Reproduce
 
 ```sh
-python -m pip install -e . pytest
+python -m pip install -e '.[tray]' pytest
 python -m pytest -q
 ```
 
-For older-rsync compatibility, mount this repository read-only into the test
-container. Run from the repository root:
+For the full missing-package installer and Qt tests on Ubuntu, run from the
+repository root:
+
+```sh
+docker build -f tests/Dockerfile.install -t napback-install-test .
+docker run --rm --network none napback-install-test
+```
+
+For backup-core compatibility without Qt (tray tests are skipped), mount this
+repository read-only into the smaller test container:
 
 ```sh
 docker build -f tests/Dockerfile.compat -t napback-tests:ubuntu2404 .

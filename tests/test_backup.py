@@ -378,7 +378,7 @@ def test_recursive_zfs_plan_uses_all_children_and_a_common_snapshot(job):
     config.sources = [{"name": "root", "dataset": "tank/root", "recursive": True}]
     responses = [
         "tank/root\t/mnt/tank/root\ntank/root/sub\t/mnt/tank/root/sub\n",
-        "tank/root@auto-one\t100000\ntank/root/sub@auto-one\t100000\n",
+        "tank/root@auto-one\t100000\t111\ntank/root/sub@auto-one\t100000\t222\n",
         "",
         "",
     ]
@@ -394,7 +394,7 @@ def test_custom_child_mountpoint_requires_explicit_source(job):
     config.sources = [{"name": "root", "dataset": "tank/root"}]
     responses = [
         "tank/root\t/mnt/tank/root\ntank/root/sub\t/mnt/other\n",
-        "tank/root@auto-one\t100000\ntank/root/sub@auto-one\t100000\n",
+        "tank/root@auto-one\t100000\t111\ntank/root/sub@auto-one\t100000\t222\n",
         "",
     ]
     with patch.object(core.Config, "remote", side_effect=responses):
@@ -459,7 +459,7 @@ def test_cli_commands_report_machine_readable_results(job, capsys):
 def test_setup_checks_sources_before_initializing_target(tmp_path, monkeypatch):
     target = tmp_path / "repository"
     configfile = tmp_path / "config.json"
-    responses = iter(["my-nas", "y", "tank/documents", str(target), "", "n"])
+    responses = iter(["my-nas", "y", "tank/documents", str(target), "", "1", "n"])
     monkeypatch.setattr("builtins.input", lambda prompt: next(responses))
     with (
         patch.object(core.Config, "remote", return_value="tank/documents\t1M\t/mnt/tank/documents"),
@@ -474,7 +474,7 @@ def test_setup_checks_sources_before_initializing_target(tmp_path, monkeypatch):
 def test_setup_snapshot_failure_creates_no_target(tmp_path, monkeypatch):
     target = tmp_path / "repository"
     configfile = tmp_path / "config.json"
-    responses = iter(["my-nas", "y", "tank/documents", str(target), ""])
+    responses = iter(["my-nas", "y", "tank/documents", str(target), "", "1"])
     monkeypatch.setattr("builtins.input", lambda prompt: next(responses))
     with (
         patch.object(core.Config, "remote", return_value="tank/documents\t1M\t/mnt/tank/documents"),

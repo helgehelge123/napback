@@ -25,6 +25,10 @@ class BackupError(Exception):
     """An actionable failure; the previous completed backup remains valid."""
 
 
+class BusyError(BackupError):
+    """Another process currently owns the repository lock."""
+
+
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}\Z")
 SNAPSHOT_ID = re.compile(r"\d{8}T\d{6}Z-[0-9a-f]{12}\Z")
 MARKER = ".napback-repository.json"
@@ -125,6 +129,8 @@ class Config:
     repository_id: str
     mountpoint: Path
     sources: list[dict]
+    trigger: str = "auto"
+    check_interval_minutes: int = 1
     interval_hours: float = 24
     keep: int = 30
     min_free_bytes: int = 1024**3
@@ -164,6 +170,14 @@ class Config:
             "snapshot_max_age_hours",
         ):
             number(getattr(config, field), field)
+        if config.trigger not in ("auto", "new_snapshot", "interval"):
+            raise BackupError("trigger must be auto, new_snapshot or interval")
+        if (
+            isinstance(config.check_interval_minutes, bool)
+            or not isinstance(config.check_interval_minutes, int)
+            or not 1 <= config.check_interval_minutes <= 1440
+        ):
+            raise BackupError("check_interval_minutes must be an integer from 1 to 1440")
         for field in ("keep", "min_free_bytes", "bandwidth_limit_kib"):
             value = getattr(config, field)
             number(value, field, 0)
@@ -227,7 +241,22 @@ class Config:
                     raise BackupError("Invalid dataset name")
                 if not isinstance(source.get("recursive", True), bool):
                     raise BackupError("recursive must be a boolean")
+        if config.trigger == "new_snapshot" and not all(
+            "dataset" in source for source in config.sources
+        ):
+            raise BackupError(
+                "new_snapshot requires ZFS dataset sources; use auto or interval for path sources"
+            )
         return config
+
+    def effective_trigger(self):
+        if self.trigger == "auto":
+            return (
+                "new_snapshot"
+                if all("dataset" in source for source in self.sources)
+                else "interval"
+            )
+        return self.trigger
 
     def fingerprint(self):
         data = asdict(self)
@@ -236,6 +265,8 @@ class Config:
         # Retention, connection timeouts and storage thresholds do not change backup contents.
         for key in (
             "keep",
+            "trigger",
+            "check_interval_minutes",
             "interval_hours",
             "timeout_seconds",
             "min_free_bytes",
@@ -338,7 +369,7 @@ def locked(config):
         try:
             fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
-            raise BackupError("Another backup, verification or prune is running") from error
+            raise BusyError("Another backup, verification or prune is running") from error
         yield
     finally:
         os.close(fd)
@@ -351,11 +382,12 @@ class Source:
     dataset: str | None = None
     snapshot: str | None = None
     created: int | None = None
+    guid: str | None = None
 
 
 def choose_common_snapshot(datasets, rows, prefix, now, max_age):
     candidates = {dataset: {} for dataset in datasets}
-    for name, created in rows:
+    for name, created, *_ in rows:
         dataset, tag = name.rsplit("@", 1)
         if dataset in candidates and tag.startswith(prefix):
             candidates[dataset][tag] = int(created)
@@ -404,9 +436,12 @@ def plan_sources(config, now):
         if root not in datasets:
             raise BackupError("Requested dataset not found")
         output = config.remote(
-            ["zfs", "list", "-H", "-p", "-t", "snapshot", "-o", "name,creation", "-r", root]
+            ["zfs", "list", "-H", "-p", "-t", "snapshot", "-o", "name,creation,guid", "-r", root]
         )
         rows = [line.split("\t") for line in output.splitlines() if line]
+        if any(len(row) != 3 or not row[2].isdigit() for row in rows):
+            raise BackupError("Invalid ZFS snapshot GUID response")
+        guids = {row[0]: row[2] for row in rows}
         tag, timestamps = choose_common_snapshot(
             datasets, rows, config.snapshot_prefix, now, config.snapshot_max_age_hours * 3600
         )
@@ -422,10 +457,11 @@ def plan_sources(config, now):
                 )
             name = source["name"] + ("/" + relative if relative else "")
             path = datasets[dataset] + "/.zfs/snapshot/" + tag
-            config.remote(
-                ["test", "-d", path]
-            )  # Trigger ZFS automount on the host before Docker bind mounting.
-            result.append(Source(name, path, dataset, tag, timestamps[dataset][tag]))
+            result.append(
+                Source(
+                    name, path, dataset, tag, timestamps[dataset][tag], guids[dataset + "@" + tag]
+                )
+            )
     return result
 
 
@@ -585,96 +621,190 @@ def attempt(config, started):
         write_json(config.target / "last-attempt.json", state)
 
 
-def run(config, *, force=False, now=None):
+def source_signature(sources):
+    """GUIDs distinguish even snapshots recreated with the same name."""
+    items = [asdict(item) if isinstance(item, Source) else item for item in sources]
+    return sorted(
+        (
+            item["name"],
+            item.get("dataset"),
+            item.get("guid"),
+            item.get("snapshot"),
+            item.get("created"),
+        )
+        for item in items
+    )
+
+
+def same_sources(config, entries, sources):
+    matches = [
+        manifest
+        for _, manifest in entries
+        if manifest.get("config_fingerprint") == config.fingerprint()
+    ]
+    return bool(matches and source_signature(matches[-1]["sources"]) == source_signature(sources))
+
+
+def scheduled_check_due(config, now):
+    path = config.target / "last-check.json"
+    if not path.exists():
+        return True
+    state = read_json(path)
+    if state.get("config_fingerprint") != config.fingerprint():
+        return True
+    elapsed = now - state["started_at"]
+    return elapsed < -300 or elapsed >= config.check_interval_minutes * 60
+
+
+@contextmanager
+def checking(config, started):
+    state = {
+        "started_at": started,
+        "status": "checking",
+        "config_fingerprint": config.fingerprint(),
+    }
+    write_json(config.target / "last-check.json", state)
+    try:
+        yield state
+    except BaseException as error:
+        state.update(status="failed", error=str(error)[-3000:])
+        raise
+    finally:
+        state["ended_at"] = time.time()
+        with contextlib.suppress(OSError, BackupError):
+            write_json(config.target / "last-check.json", state)
+
+
+def run(config, *, force=False, now=None, scheduled=False):
     started = time.time() if now is None else now
     with locked(config):
         entries = completed(config)
         update_latest(config, entries)
-        if not force and not due(config, entries, started):
-            return {"status": "not_due", "last_success": entries[-1][1]["completed_at"]}
-        with attempt(config, started):
-            clean_work(config)
-            if shutil.disk_usage(config.target).free < config.min_free_bytes:
-                raise BackupError("Not enough free space; no completed snapshots were deleted")
+        if scheduled and not force and not scheduled_check_due(config, started):
+            return {"status": "check_not_due"}
+        with checking(config, started) as check_state:
+            return _checked_run(config, entries, check_state, force, started, now)
+
+
+def _checked_run(config, entries, check_state, force, started, now):
+    snapshot_mode = config.effective_trigger() == "new_snapshot"
+    sources = None
+    if not force and not snapshot_mode and not due(config, entries, started):
+        check_state["status"] = "not_due"
+        return {"status": "not_due", "last_success": entries[-1][1]["completed_at"]}
+    if snapshot_mode:
+        sources = plan_sources(config, started)
+        if not force and same_sources(config, entries, sources):
+            check_state["status"] = "no_new_snapshot"
+            check_state["sources"] = [asdict(source) for source in sources]
+            return {"status": "no_new_snapshot", "last_success": entries[-1][1]["completed_at"]}
+    with attempt(config, started):
+        clean_work(config)
+        if shutil.disk_usage(config.target).free < config.min_free_bytes:
+            raise BackupError("Not enough free space; no completed snapshots were deleted")
+        if sources is None:
             sources = plan_sources(config, started)
-            identifier = (
-                datetime.fromtimestamp(started, timezone.utc).strftime("%Y%m%dT%H%M%SZ-")
-                + uuid.uuid4().hex[:12]
+        check_state["status"] = "running"
+        write_json(config.target / "last-check.json", check_state)
+        identifier = (
+            datetime.fromtimestamp(started, timezone.utc).strftime("%Y%m%dT%H%M%SZ-")
+            + uuid.uuid4().hex[:12]
+        )
+        stage = config.target / "work" / identifier
+        stage.mkdir(mode=0o700)
+        write_json(stage / "owner.json", {"repository_id": config.repository_id, "id": identifier})
+        previous = entries[-1][0] / "data" if entries else None
+        for source in sources:
+            if source.dataset:
+                config.remote(
+                    ["test", "-d", source.path]
+                )  # Trigger host automount only for actual transfers.
+            destination = stage / "data" / source.name
+            # A source may contain a symlink where a child dataset belongs.
+            no_symlink(destination)
+            destination.mkdir(parents=True, exist_ok=True)
+            command(
+                transfer_command(
+                    config, source, destination, previous / source.name if previous else None
+                ),
+                timeout=config.timeout_seconds,
             )
-            stage = config.target / "work" / identifier
-            stage.mkdir(mode=0o700)
-            write_json(
-                stage / "owner.json", {"repository_id": config.repository_id, "id": identifier}
-            )
-            previous = entries[-1][0] / "data" if entries else None
-            for source in sources:
-                destination = stage / "data" / source.name
-                # A source may contain a symlink where a child dataset belongs.
-                no_symlink(destination)
-                destination.mkdir(parents=True, exist_ok=True)
-                command(
-                    transfer_command(
-                        config, source, destination, previous / source.name if previous else None
-                    ),
+            if config.verify:
+                changes = command(
+                    transfer_command(config, source, destination, verify=True),
                     timeout=config.timeout_seconds,
                 )
-                if config.verify:
-                    changes = command(
-                        transfer_command(config, source, destination, verify=True),
-                        timeout=config.timeout_seconds,
-                    )
-                    if changes.strip():
-                        raise BackupError(
-                            f"Verification failed for {source.name}: {changes[:1500]}"
-                        )
-            from .integrity import record
+                if changes.strip():
+                    raise BackupError(f"Verification failed for {source.name}: {changes[:1500]}")
+        from .integrity import record
 
-            inventory_sha256 = record(stage)
-            finished = time.time() if now is None else now
-            manifest = {
-                "sequence": max((item.get("sequence", 0) for _, item in entries), default=0) + 1,
-                "inventory_sha256": inventory_sha256,
-                "format": 1,
-                "id": identifier,
-                "repository_id": config.repository_id,
-                "config_fingerprint": config.fingerprint(),
-                "started_at": started,
-                "completed_at": finished,
-                "verified": config.verify,
-                "sources": [asdict(source) for source in sources],
-            }
-            write_json(stage / "manifest.json", manifest)
-            sync_tree(stage)
-            final = config.target / "snapshots" / identifier
-            check_repository(config)
-            os.rename(stage, final)
-            fsync_dir(config.target / "snapshots")
-            fsync_dir(config.target / "work")
-            # The manifest is the success record; no fragile separate success timestamp.
-            entries = completed(config)
-            update_latest(config, entries)
-            prune(config, entries)
-            return {
-                "status": "completed",
-                "id": identifier,
-                "last_success": finished,
-                "verified": config.verify,
-                "sources": len(sources),
-            }
+        inventory_sha256 = record(stage)
+        finished = time.time() if now is None else now
+        manifest = {
+            "sequence": max((item.get("sequence", 0) for _, item in entries), default=0) + 1,
+            "inventory_sha256": inventory_sha256,
+            "format": 1,
+            "id": identifier,
+            "repository_id": config.repository_id,
+            "config_fingerprint": config.fingerprint(),
+            "started_at": started,
+            "completed_at": finished,
+            "verified": config.verify,
+            "sources": [asdict(source) for source in sources],
+        }
+        write_json(stage / "manifest.json", manifest)
+        sync_tree(stage)
+        final = config.target / "snapshots" / identifier
+        check_repository(config)
+        os.rename(stage, final)
+        fsync_dir(config.target / "snapshots")
+        fsync_dir(config.target / "work")
+        # The manifest is the success record; no fragile separate success timestamp.
+        entries = completed(config)
+        update_latest(config, entries)
+        prune(config, entries)
+        check_state["status"] = "completed"
+        return {
+            "status": "completed",
+            "id": identifier,
+            "last_success": finished,
+            "verified": config.verify,
+            "sources": len(sources),
+        }
+
+
+def _status_data(config, running=False):
+    attempt_path = config.target / "last-attempt.json"
+    check_path = config.target / "last-check.json"
+    last_attempt = read_json(attempt_path) if attempt_path.exists() else None
+    last_check = read_json(check_path) if check_path.exists() else None
+    if not running and last_attempt and last_attempt.get("status") == "running":
+        last_attempt["status"] = "interrupted"
+    if not running and last_check and last_check.get("status") in ("checking", "running"):
+        last_check["status"] = "interrupted"
+    result = {
+        "running": running,
+        "last_attempt": last_attempt,
+        "last_check": last_check,
+        "target": str(config.target),
+        "trigger": config.effective_trigger(),
+        "check_interval_minutes": config.check_interval_minutes,
+    }
+    if running:
+        return result  # Published directories can change while another process owns the lock.
+    entries = completed(config)
+    result.update(
+        snapshots=len(entries),
+        last_success=entries[-1][1]["completed_at"] if entries else None,
+        due=due(config, entries, time.time()) if config.effective_trigger() == "interval" else None,
+        incomplete=len(list((config.target / "work").iterdir())),
+    )
+    return result
 
 
 def status(config):
-    with locked(config):
-        entries = completed(config)
-        attempt_path = config.target / "last-attempt.json"
-        last_attempt = read_json(attempt_path) if attempt_path.exists() else None
-        if last_attempt and last_attempt.get("status") == "running":
-            last_attempt["status"] = "interrupted"  # We hold the lock, so no backup is running.
-        return {
-            "last_attempt": last_attempt,
-            "target": str(config.target),
-            "snapshots": len(entries),
-            "last_success": entries[-1][1]["completed_at"] if entries else None,
-            "due": due(config, entries, time.time()),
-            "incomplete": len(list((config.target / "work").iterdir())),
-        }
+    try:
+        with locked(config):
+            return _status_data(config)
+    except BusyError:
+        return _status_data(config, running=True)

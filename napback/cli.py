@@ -43,11 +43,9 @@ def unit_quote(value):
 
 def unit_contents(config_path):
     executable = Path(sys.executable).absolute()
-    command = (
-        f"{unit_quote(executable)} -m napback --config {unit_quote(config_path.absolute())} run"
-    )
+    command = f"{unit_quote(executable)} -m napback --config {unit_quote(config_path.absolute())} run --scheduled"
     service = f"""[Unit]
-Description=Napback: pull a backup if the last success is overdue
+Description=Napback: check for new snapshots and pull changed generations
 
 [Service]
 Type=oneshot
@@ -119,6 +117,12 @@ def setup(config_path):
         "sudo": use_sudo,
         "sources": sources,
     }
+    interval = input("Check for new snapshots every how many minutes? [1]: ").strip()
+    config["check_interval_minutes"] = int(interval or "1")
+    config["trigger"] = "new_snapshot"
+    print(
+        "Backups contain readable files. ZFS encryption is not inherited; use an encrypted destination filesystem if needed."
+    )
     if image:
         config["docker_image"] = image
     # Validate and plan before creating the repository or replacing existing config.
@@ -145,10 +149,17 @@ def main(argv=None):
     parser.add_argument("--config", type=Path, default=default_config())
     commands = parser.add_subparsers(dest="action", required=True)
     commands.add_parser("setup", help="Interactive SSH/ZFS setup")
+    commands.add_parser("tray", help="Show background status in the desktop system tray")
+    commands.add_parser(
+        "install-tray", help="Install and start the desktop tray with login autostart"
+    )
     init = commands.add_parser("init", help="Initialize a new or empty backup directory")
     init.add_argument("target", type=Path)
     run = commands.add_parser("run", help="Back up only if due")
     run.add_argument("--force", action="store_true")
+    run.add_argument(
+        "--scheduled", action="store_true", help="Respect the configured polling interval"
+    )
     commands.add_parser("status", help="Show last success, due state and incomplete attempts")
     commands.add_parser("plan", help="List selected sources without copying")
     commands.add_parser("list", help="List completed snapshots")
@@ -171,7 +182,15 @@ def main(argv=None):
 
     signal.signal(signal.SIGTERM, interrupted)
     try:
-        if args.action == "init":
+        if args.action == "tray":
+            from .tray import main as tray_main
+
+            return tray_main(args.config)
+        if args.action == "install-tray":
+            from .desktop import install_tray
+
+            result = install_tray(args.config)
+        elif args.action == "init":
             result = core.initialize(args.target)
         elif args.action == "setup":
             result = setup(args.config)
@@ -180,7 +199,7 @@ def main(argv=None):
         else:
             config = core.Config.load(args.config)
             if args.action == "run":
-                result = core.run(config, force=args.force)
+                result = core.run(config, force=args.force, scheduled=args.scheduled)
             elif args.action == "status":
                 result = core.status(config)
             elif args.action == "plan":
@@ -254,6 +273,7 @@ def main(argv=None):
         return 0
     except (
         core.BackupError,
+        ImportError,
         OSError,
         ValueError,
         subprocess.TimeoutExpired,

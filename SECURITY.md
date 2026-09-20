@@ -10,6 +10,12 @@ storage. Do not put passwords or tokens in configuration files. The repository
 is private to the user (0700); extended attributes can contain source ownership
 and access-control metadata.
 
+SSH encryption protects data in transit only. Napback reads unlocked snapshot
+files through rsync; it does not preserve native ZFS encryption or copy ZFS keys.
+Local backups contain readable file contents and metadata. Use an encrypted
+destination filesystem for encryption at rest. Napback does not configure or
+unlock that filesystem.
+
 Docker mounts the selected source read-only, disables networking, drops all
 capabilities except DAC_READ_SEARCH (needed to read root-owned source files),
 and enables no-new-privileges. No host Docker socket or device is mounted inside

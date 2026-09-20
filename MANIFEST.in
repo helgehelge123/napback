@@ -4,3 +4,5 @@ recursive-include examples *.json
 recursive-include docker Dockerfile *.yaml
 include tests/Dockerfile.compat
 recursive-exclude * *.bak*
+recursive-include scripts *.sh
+include tests/Dockerfile.install

@@ -1,0 +1,12 @@
+# A clean Ubuntu desktop-client installation, including missing dependencies.
+FROM ubuntu:24.04
+RUN apt-get update && apt-get install -y --no-install-recommends sudo ca-certificates
+RUN useradd --create-home tester && printf 'tester ALL=(ALL) NOPASSWD: ALL\n' > /etc/sudoers.d/tester
+COPY --chown=tester:tester . /project
+USER tester
+WORKDIR /project
+ENV PATH="/home/tester/.local/bin:${PATH}"
+RUN ./install.sh && napback --version
+RUN /home/tester/.local/share/napback/venv/bin/python -m pip install pytest
+ENV QT_QPA_PLATFORM=offscreen
+CMD ["/home/tester/.local/share/napback/venv/bin/python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests"]

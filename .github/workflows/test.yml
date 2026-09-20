@@ -13,8 +13,14 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - run: sudo apt-get update && sudo apt-get install -y rsync acl
-      - run: python -m pip install . pytest
+      - run: sudo apt-get update && sudo apt-get install -y rsync acl libqt6gui6 libxcb-cursor0
+      - run: python -m pip install ".[tray]" pytest
       - run: python -m pytest -q
       - run: docker build -t napback-source:0.1.0 docker
       - run: docker run --rm --network none --read-only napback-source:0.1.0
+  installer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f tests/Dockerfile.install -t napback-install-test .
+      - run: docker run --rm --network none napback-install-test
