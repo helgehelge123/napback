@@ -459,7 +459,7 @@ def test_cli_commands_report_machine_readable_results(job, capsys):
 def test_setup_checks_sources_before_initializing_target(tmp_path, monkeypatch):
     target = tmp_path / "repository"
     configfile = tmp_path / "config.json"
-    responses = iter(["my-nas", "y", "tank/documents", str(target), "", "1", "n"])
+    responses = iter(["my-nas", "y", "tank/documents", str(target), "files", "", "1", "n"])
     monkeypatch.setattr("builtins.input", lambda prompt: next(responses))
     with (
         patch.object(core.Config, "remote", return_value="tank/documents\t1M\t/mnt/tank/documents"),
@@ -474,7 +474,7 @@ def test_setup_checks_sources_before_initializing_target(tmp_path, monkeypatch):
 def test_setup_snapshot_failure_creates_no_target(tmp_path, monkeypatch):
     target = tmp_path / "repository"
     configfile = tmp_path / "config.json"
-    responses = iter(["my-nas", "y", "tank/documents", str(target), "", "1"])
+    responses = iter(["my-nas", "y", "tank/documents", str(target), "files", "", "1"])
     monkeypatch.setattr("builtins.input", lambda prompt: next(responses))
     with (
         patch.object(core.Config, "remote", return_value="tank/documents\t1M\t/mnt/tank/documents"),

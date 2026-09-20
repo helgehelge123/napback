@@ -1,18 +1,18 @@
 # Validation record
 
-Validation performed on 2026-09-20 for version 0.2.0, building on the version 0.1
+Validation performed on 2026-09-20 for version 0.3.0, building on the version 0.1/0.2
 transfer and recovery tests documented below. Tests use synthetic data;
 production applications were not stopped and production datasets were not copied
 or modified during validation.
 
 ## Automated suite
 
-- **72 tests passed** on CachyOS, Python 3.14.7, rsync 3.5.0.
-- **72 tests passed** in an Ubuntu 24.04 container, using the distribution's
+- **97 tests passed** on CachyOS, Python 3.14.7, rsync 3.5.0.
+- **97 tests passed** in an Ubuntu 24.04 container, using the distribution's
   Python 3.12 and rsync 3.2.7 packages, running as an unprivileged user.
 - Version 0.1 statement coverage: **90% overall**, 90% core, 93% CLI, 97% inventory.
   The separate local transport subprocess is exercised but is not included in
-  that process's coverage measurements. Coverage was not remeasured for 0.2.
+  that process's coverage measurements. Coverage was not remeasured for 0.2/0.3.
 - Ruff checks and formatting pass. Generated systemd units pass
   `systemd-analyze --user verify`.
 
@@ -103,6 +103,48 @@ local data in version 0.1:
 Actual suspend/resume and a physical PC reboot were **not** performed. Catch-up
 behavior is based on systemd's documented calendar timer semantics and verified
 unit configuration. The 24-hour comparison is tested at its exact boundary.
+
+
+## Version 0.3 encrypted raw storage
+
+A dedicated AES-256-GCM ZFS dataset and child were created with a private synthetic
+test key kept on the NAS, outside the public repository. No production keys were
+exported or inspected. With OpenZFS 2.3.9 on TrueNAS, the following passed:
+
+1. Full raw parent/child streams copied to ordinary files on a PC without ZFS.
+2. A new recursive generation produced incremental streams. Retention of only one
+   local generation removed the older directory while keeping its required base
+   streams through hard links; chain validation and SHA-256 verification passed.
+3. Unique plaintext content markers were absent from archive files. Native raw
+   receive and original-key unlock, rather than marker absence alone, establish
+   that the format remains encrypted.
+4. Full plus incremental streams were actually received into new NAS datasets.
+   Both received filesystems were initially locked. The original test key unlocked
+   them. File contents, binary payload hash, uid 0, mode 0600, user xattr and symlink
+   matched the selected source generation.
+5. The first content check used an incorrect mountpoint: the test prepended `/mnt`
+   although TrueNAS's pool altroot already supplied it. Reading the actual ZFS
+   mountpoint resolved the test failure; the receive itself was correct. Recovery
+   documentation now explains this distinction.
+6. A new full generation was backed up after unmounting only the synthetic source
+   filesystems and unloading their encryption key. The key stayed unavailable.
+7. A wrong test key was rejected by the restored dataset; it remained locked.
+8. A real throttled raw transfer was terminated with SIGTERM. No incomplete
+   generation was published, the previous archive remained verifiable, and a
+   subsequent retry completed successfully with intact dependencies.
+
+The automated raw tests cover full/incremental selection, missing or replaced
+bases, chain limits, retention, corruption before reuse, producer errors, empty
+streams, timeouts, encryption enforcement, storage-mode separation, restore
+collision protection and default encrypted setup. A changed incremental base
+during transfer is rejected before publication. A simulated same-size ciphertext
+write corruption is rejected by comparing readback with the hash computed during
+transfer, before any generation is published.
+
+Native encryption and receive are tested on real ZFS; tests using stand-in stream
+bytes exercise bookkeeping only. Key rotation, physical power loss and every
+possible ZFS feature/version combination remain untested. The archive does not
+repair damaged stream files. Tests retained synthetic datasets for inspection.
 
 ## Reproduce
 

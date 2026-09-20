@@ -8,7 +8,7 @@ can use separately named units generated from the supplied unit structure.
 ## Manual setup
 
 ```sh
-napback init /mnt/backup-disk/nas
+napback init /mnt/backup-disk/nas --storage zfs_raw
 ```
 
 This prints `target`, `repository_id`, and the detected `mountpoint`. Copy these
@@ -23,6 +23,7 @@ Minimal ZFS configuration:
   "target": "/mnt/backup-disk/nas",
   "repository_id": "PASTE_THE_ID_FROM_INIT",
   "mountpoint": "/mnt/backup-disk",
+  "storage": "zfs_raw",
   "host": "my-nas",
   "sudo": true,
   "trigger": "new_snapshot",
@@ -53,16 +54,18 @@ that actually contains the target. Repository paths must not contain symlinks.
 | `repository_id` | required | UUID returned by `init` |
 | `mountpoint` | required | Expected filesystem mountpoint returned by `init` |
 | `sources` | required | One or more named path or dataset sources |
+| `storage` | `"files"` for old configs; `"zfs_raw"` in new setup/init | Native encrypted ZFS stream archive or ordinary unencrypted files; use a new repository to change modes |
+| `raw_full_every` | `30` | Maximum raw stream chain length (1–1000); the next changed generation starts with a fresh full stream |
 | `trigger` | `"auto"` | `new_snapshot` copies changed ZFS snapshot GUIDs; `interval` uses elapsed time; `auto` chooses snapshots when every source is a dataset, otherwise interval |
 | `check_interval_minutes` | `1` | Polling interval in whole minutes, from 1 to 1440 |
 | `interval_hours` | `24` | Only in interval mode: hours since last successful completion, minimum 1 |
 | `keep` | `30` | Successful versions to retain; `0` keeps all |
 | `min_free_bytes` | `1073741824` | Free-space threshold before starting; not a size reservation |
-| `verify` | `true` | Compare transferred files to the source using rsync checksums before publication |
+| `verify` | `true` | Files: rsync source comparison; raw: mandatory local ciphertext readback before publication |
 | `host` | unset | SSH alias or `user@hostname`; unset means local path sources |
 | `ssh_options` | `[]` | Extra SSH arguments, for example `["-i", "/home/me/.ssh/backup"]` |
 | `sudo` | `false` | Prepend `sudo -n` to NAS commands |
-| `docker_image` | unset | Use a temporary source container instead of NAS-installed rsync |
+| `docker_image` | unset | Files mode only: temporary source container instead of NAS-installed rsync; ignored by raw storage |
 | `snapshot_prefix` | `"auto-"` | Select only snapshot names starting with this prefix; `""` allows any |
 | `snapshot_max_age_hours` | `48` | Maximum age of the oldest selected child snapshot |
 | `timeout_seconds` | `86400` | Maximum duration of each transfer or verification; also Docker sender lifetime |
@@ -97,16 +100,25 @@ once to establish the new baseline. Older local versions remain valid.
 `verify: false` disables the second source comparison only. File selection still
 uses checksums, and each backup still gets a SHA-256 inventory of local contents.
 The inventory is not a replacement for an application-consistent source snapshot.
+This option applies only to `files` mode; raw storage rejects disabled verification.
+
+`zfs_raw` requires encrypted dataset sources, including every selected child.
+It permits locked/unmounted datasets and custom mountpoints. ZFS and the original
+keys are needed for restore, not for storage on the PC. See [encryption](encryption.md)
+for key handling, incremental dependencies, migration and `restore-zfs`.
 
 ## Ordinary directory sources
 
 For a local directory, omit `host`:
+
+Initialize it explicitly with `napback init /mnt/backup-disk/files --storage files`.
 
 ```json
 {
   "target": "/mnt/backup-disk/files",
   "repository_id": "PASTE_THE_ID_FROM_INIT",
   "mountpoint": "/mnt/backup-disk",
+  "storage": "files",
   "sources": [{"name": "documents", "path": "/home/me/Documents"}]
 }
 ```

@@ -2,6 +2,8 @@
   "target": "/mnt/backup-disk/nas",
   "repository_id": "REPLACE_WITH_ID_FROM_NAPBACK_INIT",
   "mountpoint": "/mnt/backup-disk",
+  "storage": "zfs_raw",
+  "raw_full_every": 30,
   "trigger": "new_snapshot",
   "check_interval_minutes": 1,
   "interval_hours": 24,
@@ -11,7 +13,6 @@
   "host": "my-nas",
   "ssh_options": ["-i", "/home/me/.ssh/napback"],
   "sudo": true,
-  "docker_image": "napback-source:0.1.0",
   "snapshot_prefix": "auto-",
   "snapshot_max_age_hours": 48,
   "sources": [

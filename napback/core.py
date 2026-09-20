@@ -92,7 +92,7 @@ def write_json(path, data):
         temporary.unlink(missing_ok=True)
 
 
-def command(argv, *, timeout=120):
+def command(argv, *, timeout=120, stdin=None):
     """Run without a local shell. Kill the whole process group on timeout/interrupt."""
     process = subprocess.Popen(
         argv,
@@ -101,6 +101,7 @@ def command(argv, *, timeout=120):
         text=True,
         errors="replace",
         start_new_session=True,
+        stdin=stdin,
     )
     try:
         out, err = process.communicate(timeout=timeout)
@@ -129,6 +130,8 @@ class Config:
     repository_id: str
     mountpoint: Path
     sources: list[dict]
+    storage: str = "files"
+    raw_full_every: int = 30
     trigger: str = "auto"
     check_interval_minutes: int = 1
     interval_hours: float = 24
@@ -159,6 +162,14 @@ class Config:
             raise BackupError(str(error)) from error
         config.target = absolute(config.target, "target")
         config.mountpoint = absolute(config.mountpoint, "mountpoint")
+        if config.storage not in ("files", "zfs_raw"):
+            raise BackupError("storage must be files or zfs_raw")
+        if (
+            isinstance(config.raw_full_every, bool)
+            or not isinstance(config.raw_full_every, int)
+            or not 1 <= config.raw_full_every <= 1000
+        ):
+            raise BackupError("raw_full_every must be an integer from 1 to 1000")
         try:
             uuid.UUID(config.repository_id)
         except (ValueError, TypeError, AttributeError) as error:
@@ -247,6 +258,12 @@ class Config:
             raise BackupError(
                 "new_snapshot requires ZFS dataset sources; use auto or interval for path sources"
             )
+        if config.storage == "zfs_raw" and not all(
+            "dataset" in source for source in config.sources
+        ):
+            raise BackupError("zfs_raw storage requires ZFS dataset sources")
+        if config.storage == "zfs_raw" and not config.verify:
+            raise BackupError("zfs_raw storage requires verify=true")
         return config
 
     def effective_trigger(self):
@@ -272,8 +289,11 @@ class Config:
             "min_free_bytes",
             "bandwidth_limit_kib",
             "io_timeout_seconds",
+            "raw_full_every",
         ):
             data.pop(key)
+        if self.storage == "files":
+            data.pop("storage")  # Preserve existing directory-backup fingerprints.
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
     def ssh(self):
@@ -289,9 +309,12 @@ class Config:
         ]
 
     def remote(self, argv):
+        return command(self.remote_argv(argv), timeout=120)
+
+    def remote_argv(self, argv):
         if self.sudo:
             argv = ["sudo", "-n", *argv]
-        return command([*self.ssh(), self.host, shlex.join(argv)], timeout=120)
+        return [*self.ssh(), self.host, shlex.join(argv)]
 
 
 def no_symlink(path):
@@ -309,7 +332,9 @@ def mount_for(path):
     return path
 
 
-def initialize(target):
+def initialize(target, storage="files"):
+    if storage not in ("files", "zfs_raw"):
+        raise BackupError("storage must be files or zfs_raw")
     target = absolute(str(target), "target")
     no_symlink(target)
     if target.exists() and any(target.iterdir()):
@@ -332,15 +357,21 @@ def initialize(target):
         probe.unlink(missing_ok=True)
         link.unlink(missing_ok=True)
     repository_id = str(uuid.uuid4())
-    write_json(target / MARKER, {"format": 1, "repository_id": repository_id})
+    marker = {"format": 1, "repository_id": repository_id}
+    if storage == "zfs_raw":
+        marker.update(format=2, storage=storage)
+    write_json(target / MARKER, marker)
     (target / "snapshots").mkdir(mode=0o700)
     (target / "work").mkdir(mode=0o700)
     fsync_dir(target)
-    return {
+    result = {
         "target": str(target),
         "repository_id": repository_id,
         "mountpoint": str(mount_for(target)),
     }
+    if storage == "zfs_raw":
+        result["storage"] = storage
+    return result
 
 
 def check_repository(config):
@@ -349,8 +380,13 @@ def check_repository(config):
     if not config.mountpoint.is_mount() or mount_for(config.target) != config.mountpoint:
         raise BackupError(f"Expected target filesystem is not mounted at {config.mountpoint}")
     marker = read_json(config.target / MARKER)
-    if marker != {"format": 1, "repository_id": config.repository_id}:
-        raise BackupError("Repository identity mismatch; refusing to write")
+    expected = {"format": 1, "repository_id": config.repository_id}
+    if config.storage == "zfs_raw":
+        expected.update(format=2, storage="zfs_raw")
+    if marker != expected:
+        raise BackupError(
+            "Repository identity mismatch or storage mismatch; use a new target when changing storage"
+        )
     for name in ("snapshots", "work"):
         path = config.target / name
         if (
@@ -429,9 +465,10 @@ def plan_sources(config, now):
             dataset, mountpoint = line.split("\t")
             if dataset != root and not dataset.startswith(root + "/"):
                 raise BackupError("Unexpected dataset in ZFS response")
-            if mountpoint in ("none", "legacy", "-"):
+            if config.storage == "files" and mountpoint in ("none", "legacy", "-"):
                 raise BackupError(f"Dataset {dataset} needs a normal mounted filesystem")
-            absolute(mountpoint, "ZFS mountpoint")
+            if config.storage == "files":
+                absolute(mountpoint, "ZFS mountpoint")
             datasets[dataset] = mountpoint
         if root not in datasets:
             raise BackupError("Requested dataset not found")
@@ -451,17 +488,25 @@ def plan_sources(config, now):
             relative = dataset[len(root) :].lstrip("/")
             # Snapshot trees contain mountpoint placeholders. A custom mountpoint cannot
             # be reconstructed by dataset name; fail instead of silently restoring wrong paths.
-            if relative and datasets[dataset] != datasets[root] + "/" + relative:
+            if (
+                config.storage == "files"
+                and relative
+                and datasets[dataset] != datasets[root] + "/" + relative
+            ):
                 raise BackupError(
                     f"Custom child mountpoint for {dataset}; configure it as a separate source"
                 )
             name = source["name"] + ("/" + relative if relative else "")
-            path = datasets[dataset] + "/.zfs/snapshot/" + tag
+            path = datasets[dataset] + "/.zfs/snapshot/" + tag if config.storage == "files" else ""
             result.append(
                 Source(
                     name, path, dataset, tag, timestamps[dataset][tag], guids[dataset + "@" + tag]
                 )
             )
+    if config.storage == "zfs_raw":
+        from .raw import require_encryption
+
+        require_encryption(config, result)
     return result
 
 
@@ -714,7 +759,12 @@ def _checked_run(config, entries, check_state, force, started, now):
         stage.mkdir(mode=0o700)
         write_json(stage / "owner.json", {"repository_id": config.repository_id, "id": identifier})
         previous = entries[-1][0] / "data" if entries else None
-        for source in sources:
+        raw_streams = None
+        if config.storage == "zfs_raw":
+            from .raw import backup_streams
+
+            raw_streams = backup_streams(config, sources, stage, entries)
+        for source in sources if config.storage == "files" else []:
             if source.dataset:
                 config.remote(
                     ["test", "-d", source.path]
@@ -752,7 +802,15 @@ def _checked_run(config, entries, check_state, force, started, now):
             "verified": config.verify,
             "sources": [asdict(source) for source in sources],
         }
+        if raw_streams is not None:
+            manifest.update(storage="zfs_raw", raw_streams=raw_streams)
         write_json(stage / "manifest.json", manifest)
+        if raw_streams is not None:
+            from .integrity import verify
+            from .raw import validate_streams
+
+            verify(stage, manifest)  # Read ciphertext back before publication.
+            validate_streams(stage, manifest)  # Compare readback to the in-flight stream hashes.
         sync_tree(stage)
         final = config.target / "snapshots" / identifier
         check_repository(config)
@@ -789,6 +847,7 @@ def _status_data(config, running=False):
         "target": str(config.target),
         "trigger": config.effective_trigger(),
         "check_interval_minutes": config.check_interval_minutes,
+        "storage": config.storage,
     }
     if running:
         return result  # Published directories can change while another process owns the lock.

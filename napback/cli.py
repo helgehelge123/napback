@@ -100,7 +100,11 @@ def setup(config_path):
     probe = core.Config(Path("/"), str(uuid.uuid4()), Path("/"), [], host=host, sudo=use_sudo)
     if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.@-]*", host):
         raise core.BackupError("Invalid SSH host")
-    print(probe.remote(["zfs", "list", "-H", "-o", "name,used,mountpoint", "-t", "filesystem"]))
+    print(
+        probe.remote(
+            ["zfs", "list", "-H", "-o", "name,used,encryption,mountpoint", "-t", "filesystem"]
+        )
+    )
     names = input("Datasets to back up, separated by commas (children included): ").split(",")
     sources = [
         {"name": f"dataset-{i + 1}", "dataset": name.strip(), "recursive": True}
@@ -108,7 +112,17 @@ def setup(config_path):
         if name.strip()
     ]
     target = input("New or empty destination directory on this PC: ").strip()
-    image = input("NAS Docker image [empty = installed rsync; e.g. napback-source:0.1.0]: ").strip()
+    storage = (
+        input(
+            "Storage [zfs_raw = preserve ZFS encryption; files = readable files] [zfs_raw]: "
+        ).strip()
+        or "zfs_raw"
+    )
+    image = ""
+    if storage == "files":
+        image = input(
+            "NAS Docker image [empty = installed rsync; e.g. napback-source:0.1.0]: "
+        ).strip()
     config = {
         "target": target,
         "repository_id": str(uuid.uuid4()),
@@ -116,13 +130,17 @@ def setup(config_path):
         "host": host,
         "sudo": use_sudo,
         "sources": sources,
+        "storage": storage,
     }
     interval = input("Check for new snapshots every how many minutes? [1]: ").strip()
     config["check_interval_minutes"] = int(interval or "1")
     config["trigger"] = "new_snapshot"
-    print(
-        "Backups contain readable files. ZFS encryption is not inherited; use an encrypted destination filesystem if needed."
-    )
+    if storage == "zfs_raw":
+        print(
+            "Preserves native ZFS encryption without local keys or ZFS. All selected datasets must be encrypted. Restore requires ZFS and your original keys; keep those separately."
+        )
+    else:
+        print("FILES MODE IS NOT ENCRYPTED. ZFS encryption is not inherited in this mode.")
     if image:
         config["docker_image"] = image
     # Validate and plan before creating the repository or replacing existing config.
@@ -131,7 +149,7 @@ def setup(config_path):
         core.write_json(temporary_config, config)
         checked = core.Config.load(temporary_config)
         core.plan_sources(checked, time.time())
-    config.update(core.initialize(target))
+    config.update(core.initialize(target, storage=storage))
     config_path.parent.mkdir(parents=True, exist_ok=True)
     backup_existing(config_path)
     core.write_json(config_path, config)
@@ -155,6 +173,7 @@ def main(argv=None):
     )
     init = commands.add_parser("init", help="Initialize a new or empty backup directory")
     init.add_argument("target", type=Path)
+    init.add_argument("--storage", choices=("zfs_raw", "files"), default="zfs_raw")
     run = commands.add_parser("run", help="Back up only if due")
     run.add_argument("--force", action="store_true")
     run.add_argument(
@@ -173,6 +192,15 @@ def main(argv=None):
     )
     restore.add_argument("destination", type=Path)
     restore.add_argument("--snapshot", default="latest")
+    restore_zfs = commands.add_parser(
+        "restore-zfs",
+        help="Receive encrypted streams into new unmounted datasets on the configured NAS",
+    )
+    restore_zfs.add_argument("dataset")
+    restore_zfs.add_argument(
+        "--source", help="Source name; required when the backup has multiple roots"
+    )
+    restore_zfs.add_argument("--snapshot", default="latest")
     args = parser.parse_args(argv)
 
     def interrupted(signum, frame):
@@ -191,7 +219,7 @@ def main(argv=None):
 
             result = install_tray(args.config)
         elif args.action == "init":
-            result = core.initialize(args.target)
+            result = core.initialize(args.target, storage=args.storage)
         elif args.action == "setup":
             result = setup(args.config)
         elif args.action == "install-timer":
@@ -222,6 +250,19 @@ def main(argv=None):
                     path, manifest = selected
                     count = integrity.verify(path, manifest)
                     result = {"status": "verified", "id": path.name, "entries": count}
+                    if manifest.get("storage") == "zfs_raw":
+                        from . import raw
+
+                        raw.validate_streams(path, manifest)
+                        result["storage"] = "zfs_raw"
+                        if args.action == "restore":
+                            raise core.BackupError(
+                                "Encrypted ZFS backups require restore-zfs NEW_DATASET, not a file restore"
+                            )
+                    if args.action == "restore-zfs":
+                        from . import raw
+
+                        result = raw.restore(config, path, manifest, args.dataset, args.source)
                     if args.action == "restore":
                         destination = core.absolute(str(args.destination), "restore destination")
                         core.no_symlink(destination)

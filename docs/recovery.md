@@ -1,5 +1,10 @@
 # Recovery and verification
 
+For `storage: "zfs_raw"`, use `napback verify` and `napback restore-zfs NEW_DATASET`.
+The [encrypted recovery guide](encryption.md) covers native keys, incremental
+streams, replacement NAS access and safe mounting. The file restore commands
+below apply only to `storage: "files"`.
+
 ## Normal user restore
 
 ```sh

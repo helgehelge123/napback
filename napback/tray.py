@@ -125,6 +125,10 @@ class TrayController:
                 if not details:
                     minutes = self.config.check_interval_minutes
                     details = self.tr(f"Check every {minutes} min", f"Prüfung alle {minutes} Min.")
+                    if self.config.storage == "zfs_raw":
+                        details += self.tr(" · ZFS encrypted", " · ZFS-verschlüsselt")
+                    else:
+                        details += self.tr(" · Unencrypted files", " · Unverschlüsselte Dateien")
         except (core.BackupError, OSError, ValueError) as error:
             self.state = "failed"
             details = str(error)
