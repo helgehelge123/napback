@@ -121,6 +121,14 @@ def test_config_edit_during_remote_recheck_is_not_overwritten(app):
     assert not (app.config_path.parent / "backup").exists()
 
 
+def test_relative_destination_never_depends_on_server_working_directory(app):
+    draft = settings(app)
+    draft["target"] = "some-relative-folder"
+    sources, storage = app.selection(draft)
+    with pytest.raises(core.BackupError, match="vollständigen Pfad"):
+        app.settings(draft, sources, storage)
+
+
 def test_config_edits_create_backup_and_preserve_repository_identity(app):
     draft = settings(app)
     with patch("napback.webapp.subprocess.run"):

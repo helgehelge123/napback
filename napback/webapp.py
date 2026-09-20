@@ -416,9 +416,14 @@ class Application:
         return analyze(self.catalog, sources, storage)
 
     def settings(self, payload, sources, storage):
-        target = str(Path(str(payload.get("target", ""))).expanduser().absolute())
         if not payload.get("target"):
             raise core.BackupError("Wähle einen Zielordner auf Deinem PC.")
+        target_path = Path(str(payload["target"])).expanduser()
+        if not target_path.is_absolute():
+            raise core.BackupError(
+                "Wähle den Zielordner mit „Ordner auswählen“ oder gib einen vollständigen Pfad mit / oder ~/ am Anfang ein."
+            )
+        target = str(target_path)
         existing = core.Config.load(self.config_path) if self.config_path.exists() else None
         if existing and str(existing.target) == target:
             if existing.storage != storage:

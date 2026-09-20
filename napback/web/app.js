@@ -669,7 +669,12 @@ async function dashboard() {
         "Status",
         s.running ? "Sicherung läuft" : labels[last.status] || "Bereit",
       ],
-      ["Letzte Sicherung", date(s.last_success)],
+      [
+        "Letzte Sicherung",
+        s.running && s.last_success === undefined
+          ? "Nach dem Lauf sichtbar"
+          : date(s.last_success),
+      ],
       ["Automatik", r.automatic ? "Alle " + r.minutes + " Min." : "Aus"],
     ]) {
       const card = node("div", null, "stat");
