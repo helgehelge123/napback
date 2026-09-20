@@ -318,7 +318,7 @@ def setup(config_path, language="de"):
     g.say("\nPrüfe Verbindung und lese Dataset-Liste …", "\nChecking access and reading datasets …")
     try:
         listing = probe.remote(
-            ["zfs", "list", "-H", "-o", "name,used,encryption", "-t", "filesystem"]
+            ["zfs", "list", "-H", "-o", "name,used,encryption", "-t", "filesystem,volume"]
         )
     except core.BackupError as error:
         raise core.BackupError(connection_help(g, probe) + "\n\n" + str(error)) from error

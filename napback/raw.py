@@ -152,6 +152,8 @@ def validate_streams(snapshot, manifest):
         if (
             source.get("dataset") != expected[name]["dataset"]
             or source["streams"][-1]["to_guid"] != expected[name]["guid"]
+            or source.get("kind", "filesystem") not in ("filesystem", "volume")
+            or source.get("kind", "filesystem") != expected[name].get("kind", "filesystem")
         ):
             raise core.BackupError("Raw stream source identity mismatch")
     return result
@@ -174,7 +176,9 @@ def backup_streams(config, sources, stage, entries):
         destination = stage / "data" / directory
         destination.mkdir(parents=True, mode=0o700)
         old = previous.get(source.name)
-        if old and old["dataset"] != source.dataset:
+        if old and (
+            old["dataset"] != source.dataset or old.get("kind", "filesystem") != source.kind
+        ):
             old = None
         chain = list(old["streams"]) if old else []
         unchanged = bool(chain and chain[-1]["to_guid"] == source.guid)
@@ -231,6 +235,7 @@ def backup_streams(config, sources, stage, entries):
             {
                 "name": source.name,
                 "dataset": source.dataset,
+                "kind": source.kind,
                 "directory": directory,
                 "streams": chain,
             }
@@ -263,7 +268,11 @@ def restore(config, snapshot, manifest, target, source_name):
         key=lambda s: (s["name"].count("/"), s["name"]),
     )
     pool = target.split("/", 1)[0]
-    existing = set(config.remote(["zfs", "list", "-H", "-o", "name", "-r", pool]).splitlines())
+    existing = set(
+        config.remote(
+            ["zfs", "list", "-H", "-t", "filesystem,volume", "-o", "name", "-r", pool]
+        ).splitlines()
+    )
     if target in existing or any(name.startswith(target + "/") for name in existing):
         raise core.BackupError("Restore dataset already exists; nothing was overwritten")
     if target.rsplit("/", 1)[0] not in existing:
@@ -281,7 +290,9 @@ def restore(config, snapshot, manifest, target, source_name):
                 "receive",
                 "-u",
             ]
-            if index == 0:
+            if source.get("kind", "filesystem") == "volume":
+                receive += ["-o", "volmode=none"]
+            elif index == 0:
                 receive += ["-o", "mountpoint=none", "-o", "canmount=noauto"]
             receive.append(destination)  # Never use -F, -R, rollback, or destroy.
             path = snapshot / "data" / source["directory"] / item["file"]
@@ -303,6 +314,9 @@ def restore(config, snapshot, manifest, target, source_name):
             ).strip()
             if actual != item["to_guid"]:
                 raise core.BackupError("Received snapshot GUID mismatch")
+        kind = config.remote(["zfs", "get", "-H", "-o", "value", "type", destination]).strip()
+        if kind != source.get("kind", "filesystem"):
+            raise core.BackupError("Received dataset type mismatch")
         encrypted = config.remote(
             ["zfs", "get", "-H", "-o", "value", "encryption", destination]
         ).strip()
@@ -312,5 +326,5 @@ def restore(config, snapshot, manifest, target, source_name):
     return {
         "status": "restored_zfs",
         "datasets": received,
-        "note": "Datasets remain unmounted. Load the original ZFS keys and choose safe mountpoints to read files.",
+        "note": "Filesystems remain unmounted; virtual disks remain hidden (volmode=none). Load original ZFS keys before enabling a restored filesystem or disk. No VM is created or started.",
     }

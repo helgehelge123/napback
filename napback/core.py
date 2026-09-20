@@ -151,6 +151,7 @@ class Config:
     backup_napback_config: bool = False
     backup_truenas_config: bool = False
     backup_truenas_apps: bool = False
+    backup_truenas_vms: bool = False
     config_key_file: str | None = None
 
     @classmethod
@@ -169,10 +170,17 @@ class Config:
         config.mountpoint = absolute(config.mountpoint, "mountpoint")
         if not isinstance(config.label, str) or not config.label.strip() or len(config.label) > 100:
             raise BackupError("label must contain 1 to 100 characters")
-        for field in ("backup_napback_config", "backup_truenas_config", "backup_truenas_apps"):
+        for field in (
+            "backup_napback_config",
+            "backup_truenas_config",
+            "backup_truenas_apps",
+            "backup_truenas_vms",
+        ):
             if not isinstance(getattr(config, field), bool):
                 raise BackupError(f"{field} must be a boolean")
-        if (config.backup_truenas_config or config.backup_truenas_apps) and not config.host:
+        if (
+            config.backup_truenas_config or config.backup_truenas_apps or config.backup_truenas_vms
+        ) and not config.host:
             raise BackupError("TrueNAS configuration backup requires SSH")
         if config.settings_enabled():
             key_path = absolute(config.config_key_file, "config_key_file")
@@ -323,6 +331,8 @@ class Config:
             "label",
         ):
             data.pop(key)
+        if not self.backup_truenas_vms:
+            data.pop("backup_truenas_vms")  # Preserve pre-0.7 fingerprints when disabled.
         if not self.backup_truenas_apps:
             data.pop("backup_truenas_apps")  # Preserve pre-0.6 fingerprints when disabled.
         if not self.settings_enabled():
@@ -333,7 +343,12 @@ class Config:
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
 
     def settings_enabled(self):
-        return self.backup_napback_config or self.backup_truenas_config or self.backup_truenas_apps
+        return (
+            self.backup_napback_config
+            or self.backup_truenas_config
+            or self.backup_truenas_apps
+            or self.backup_truenas_vms
+        )
 
     def ssh(self):
         # Place mandatory noninteractive settings first: OpenSSH takes the first value.
@@ -458,6 +473,7 @@ class Source:
     snapshot: str | None = None
     created: int | None = None
     guid: str | None = None
+    kind: str = "filesystem"
 
 
 def choose_common_snapshot(datasets, rows, prefix, now, max_age):
@@ -497,11 +513,25 @@ def plan_sources(config, now):
         root = source["dataset"]
         depth = ["-r"] if source.get("recursive", True) else ["-d", "0"]
         output = config.remote(
-            ["zfs", "list", "-H", "-p", "-t", "filesystem", "-o", "name,mountpoint", *depth, root]
+            [
+                "zfs",
+                "list",
+                "-H",
+                "-p",
+                "-t",
+                "filesystem,volume",
+                "-o",
+                "name,type,mountpoint",
+                *depth,
+                root,
+            ]
         )
         datasets = {}
+        kinds = {}
         for line in output.splitlines():
-            dataset, mountpoint = line.split("\t")
+            dataset, kind, mountpoint = line.split("\t")
+            if kind not in ("filesystem", "volume"):
+                raise BackupError("Unsupported ZFS dataset type")
             if dataset != root and not dataset.startswith(root + "/"):
                 raise BackupError("Unexpected dataset in ZFS response")
             if any(
@@ -509,6 +539,11 @@ def plan_sources(config, now):
                 for item in source.get("exclude", [])
             ):
                 continue
+            if config.storage == "files" and kind == "volume":
+                raise BackupError(
+                    f"Virtual disk {dataset} requires zfs_raw storage; exclude it from file backups"
+                )
+            kinds[dataset] = kind
             if config.storage == "files" and mountpoint in ("none", "legacy", "-"):
                 raise BackupError(f"Dataset {dataset} needs a normal mounted filesystem")
             if config.storage == "files":
@@ -544,7 +579,13 @@ def plan_sources(config, now):
             path = datasets[dataset] + "/.zfs/snapshot/" + tag if config.storage == "files" else ""
             result.append(
                 Source(
-                    name, path, dataset, tag, timestamps[dataset][tag], guids[dataset + "@" + tag]
+                    name,
+                    path,
+                    dataset,
+                    tag,
+                    timestamps[dataset][tag],
+                    guids[dataset + "@" + tag],
+                    kinds[dataset],
                 )
             )
     if config.storage == "zfs_raw":

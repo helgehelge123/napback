@@ -377,7 +377,7 @@ def test_recursive_zfs_plan_uses_all_children_and_a_common_snapshot(job):
     config.host = "nas"
     config.sources = [{"name": "root", "dataset": "tank/root", "recursive": True}]
     responses = [
-        "tank/root\t/mnt/tank/root\ntank/root/sub\t/mnt/tank/root/sub\n",
+        "tank/root\tfilesystem\t/mnt/tank/root\ntank/root/sub\tfilesystem\t/mnt/tank/root/sub\n",
         "tank/root@auto-one\t100000\t111\ntank/root/sub@auto-one\t100000\t222\n",
         "",
         "",
@@ -393,7 +393,7 @@ def test_custom_child_mountpoint_requires_explicit_source(job):
     config.host = "nas"
     config.sources = [{"name": "root", "dataset": "tank/root"}]
     responses = [
-        "tank/root\t/mnt/tank/root\ntank/root/sub\t/mnt/other\n",
+        "tank/root\tfilesystem\t/mnt/tank/root\ntank/root/sub\tfilesystem\t/mnt/other\n",
         "tank/root@auto-one\t100000\t111\ntank/root/sub@auto-one\t100000\t222\n",
         "",
     ]

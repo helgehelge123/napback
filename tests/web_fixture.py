@@ -39,9 +39,9 @@ def fake_remote(self, args):
         return "".join(
             f"{name}\t{kind}\t4096\t2048\t{enc}\t/nas/{name}\n" for name, kind, enc in selected
         )
-    if column == "name,mountpoint":
+    if column == "name,type,mountpoint":
         return "".join(
-            f"{name}\t/nas/{name}\n" for name, kind, _ in selected if kind == "filesystem"
+            f"{name}\t{kind}\t/nas/{name}\n" for name, kind, _ in selected
         )
     if column == "name,creation,guid":
         return "".join(

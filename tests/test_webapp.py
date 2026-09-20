@@ -224,11 +224,12 @@ def test_http_auth_origin_host_and_readonly_routes(app):
         thread.join()
 
 
-def test_unsafe_connections_and_volume_selection_are_rejected(app):
+def test_unsafe_connections_rejected_and_volumes_need_raw_storage(app):
     with pytest.raises(ValueError):
         connection({"host": "nas; touch /tmp/owned"})
-    with pytest.raises(core.BackupError, match="Virtuelle Festplatten"):
-        sources_from_selection(app.catalog, ["Vault/disk"])
+    selection = sources_from_selection(app.catalog, ["Vault/disk"])
+    assert not analyze(app.catalog, selection)["issues"]
+    assert "Virtuelle Festplatten" in " ".join(analyze(app.catalog, selection, "files")["issues"])
 
 
 def test_setup_opens_browser_by_default(tmp_path):
@@ -249,3 +250,12 @@ def test_custom_ui_jobs_never_disable_the_default_timer(app):
     commands = [call.args[0] for call in run.call_args_list]
     assert not any("napback.timer" in command for command in commands)
     assert any(app.timer_unit() + ".timer" in command for command in commands)
+
+
+def test_unencrypted_virtual_disk_never_recommends_file_mode(app):
+    disk = next(d for d in app.catalog["datasets"] if d["name"] == "Vault/disk")
+    disk["encrypted"] = False
+    sources = sources_from_selection(app.catalog, ["Vault/disk"])
+    issues = " ".join(analyze(app.catalog, sources)["issues"])
+    assert "Unverschlüsselte virtuelle Festplatten" in issues
+    assert "Dateikopie" not in issues

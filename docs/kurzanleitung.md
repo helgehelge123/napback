@@ -197,3 +197,7 @@ des Linux-Treibers `ntfs3`. Dateiinhalte, normale Zusatzattribute und gespeicher
 Zugriffsregeln werden weiterhin geprüft. Eine echte Sicherung mit Rückkopie wurde
 auf `ntfs3` getestet. FAT/exFAT bleiben wegen fehlender Hardlinks und Zusatzattribute
 ungeeignet. Andere NTFS-Treiber wurden nicht damit getestet.
+
+## Virtuelle Maschinen
+
+Ab 0.7 kannst Du verschlüsselte virtuelle Festplatten im Datenbaum auswählen. Wähle **Verschlüsselt aufbewahren** und zusätzlich **VM-Einrichtung mitsichern**. Alle Platten einer VM brauchen passende Snapshots. Napback schaltet laufende VMs nicht aus. Ein Snapshot aus dem laufenden Betrieb kann beim Wiederherstellen eine Reparatur wie nach Stromausfall benötigen. [Anleitung für VMs](virtual-machines.md).

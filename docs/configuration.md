@@ -84,6 +84,7 @@ that actually contains the target. Repository paths must not contain symlinks.
 | `label` | `"Mein Backup"` | Display name, 1–100 characters |
 | `backup_napback_config` | `false` | Include an encrypted export of this job |
 | `backup_truenas_config` | `false` | Include the official TrueNAS configuration export with secret seed |
+| `backup_truenas_vms` | `false` | Include encrypted TrueNAS VM definitions, devices and UEFI/TPM firmware files; requires SSH, an external recovery key and stopped TPM guests |
 | `backup_truenas_apps` | `false` | Include encrypted TrueNAS app definitions, versions, Docker metadata and external Compose configuration; requires SSH and administrative Docker access |
 | `config_key_file` | unset | Absolute local Fernet recovery-key path, outside backup targets; mode 600 |
 | `target` | required | Absolute local repository path |
@@ -202,3 +203,5 @@ inventory and retention. They are always encrypted, regardless of dataset storag
 mode. A settings-enabled snapshot job refreshes at least every 24 hours when
 checks can complete, even with unchanged dataset GUIDs. Failed exports prevent
 publication; they do not silently produce a partial successful backup.
+
+Encrypted ZFS volumes (zvols / virtual disks) are supported in `zfs_raw` mode, including recursive children. File mode rejects selected volumes instead of silently skipping them. See [VM backups](virtual-machines.md).

@@ -12,6 +12,7 @@ the dataset after receive. The source key does not have to be loaded while backi
 up. See [OpenZFS raw send](https://openzfs.github.io/openzfs-docs/man/v2.4/8/zfs-send.8.html).
 
 All selected datasets and children must already use native ZFS encryption.
+Since 0.7 this includes virtual disks (ZFS volumes/zvols), as well as filesystems.
 Napback checks this and rejects unencrypted datasets; it never substitutes an
 unencrypted send or silently changes the NAS. Docker is not used for raw sends.
 SSH additionally protects transport.
@@ -129,3 +130,5 @@ update the job using the new repository's values. Different repository markers
 prevent accidentally mixing raw and files storage. Napback does not delete or
 rewrite the old plaintext backups. If you want them removed later, handle that
 separately; moving/deleting files is not guaranteed secure erasure on SSDs.
+
+For virtual disks, `restore-zfs` sets `volmode=none` instead of filesystem mount properties. The restored block device stays hidden until explicitly enabled. See [VM recovery](virtual-machines.md).

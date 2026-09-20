@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import io
 import json
@@ -184,6 +185,58 @@ def export_truenas_apps(config):
     return result.stdout
 
 
+def validate_vms_export(data):
+    from .vm_export import MAX_FIRMWARE
+
+    if not data or len(data) > MAX_EXPORT:
+        raise ValueError("Invalid VM export size")
+    result = json.loads(data)
+    if (
+        result.get("format") != 1
+        or not isinstance(result.get("vms"), list)
+        or not isinstance(result.get("firmware"), list)
+    ):
+        raise ValueError("Incomplete VM settings")
+    names, total = set(), 0
+    for item in result["firmware"]:
+        name = item["path"]
+        path = PurePosixPath(name)
+        if (
+            path.is_absolute()
+            or ".." in path.parts
+            or str(path) != name
+            or not path.parts
+            or name in names
+        ):
+            raise ValueError("Unsafe VM firmware path")
+        names.add(name)
+        data = base64.b64decode(item["base64"], validate=True)
+        total += len(data)
+        if (
+            total > MAX_FIRMWARE
+            or len(data) != item["size"]
+            or hashlib.sha256(data).hexdigest() != item["sha256"]
+        ):
+            raise ValueError("Invalid VM firmware checksum")
+    return result
+
+
+def export_truenas_vms(config):
+    script = Path(__file__).with_name("vm_export.py").read_bytes()
+    result = subprocess.run(
+        config.remote_argv(["python3", "-"]), input=script, capture_output=True, timeout=300
+    )
+    try:
+        if result.returncode:
+            raise ValueError("Remote VM export failed")
+        validate_vms_export(result.stdout)
+    except Exception as error:
+        raise core.BackupError(
+            "VM-Einrichtung konnte nicht vollständig gesichert werden. Prüfe NAS-Rechte, UEFI-Dateien, laufende VMs mit TPM und gleichzeitige VM-Änderungen."
+        ) from error
+    return result.stdout
+
+
 def backup_settings(config, stage):
     cipher = Fernet(key_bytes(config.config_key_file))
     directory = stage / "data" / DIRECTORY
@@ -197,6 +250,8 @@ def backup_settings(config, stage):
         exports["truenas-config.tar.fernet"] = export_truenas(config)
     if config.backup_truenas_apps:
         exports["truenas-apps.tar.fernet"] = export_truenas_apps(config)
+    if config.backup_truenas_vms:
+        exports["truenas-vms.json.fernet"] = export_truenas_vms(config)
     for name, cleartext in exports.items():
         encrypted = cipher.encrypt(cleartext)
         if cipher.decrypt(encrypted) != cleartext:

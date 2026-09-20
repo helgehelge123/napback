@@ -225,3 +225,7 @@ python -m pytest -q
 Automated tests use temporary synthetic data. Real encrypted NAS validation uses
 dedicated test datasets and checks full/incremental receive, original-key unlock,
 contents, metadata and locked-source backup. See [testing.md](docs/testing.md).
+
+### Virtual machines
+
+Napback 0.7 also archives encrypted ZFS virtual disks, including incremental snapshots. Optional encrypted VM settings exports include device definitions and available UEFI/TPM state. Restored disks stay hidden until explicitly enabled; existing disks are never overwritten. Running guests are not stopped or quiesced. See [VM backup and recovery](docs/virtual-machines.md).

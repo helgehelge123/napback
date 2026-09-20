@@ -161,6 +161,7 @@ def test_browser_config_backup_requires_key_and_saved_confirmation(browser_page,
     page.locator("#target").fill(str(tmp_path / "with-settings"))
     page.locator("#automatic").uncheck()
     page.locator("#backup-apps").check()
+    page.locator("#backup-vms").check()
     page.locator("#review-button").click()
     page.locator("#error-text").get_by_text(
         "Lade den Wiederherstellungsschlüssel", exact=False
@@ -176,18 +177,35 @@ def test_browser_config_backup_requires_key_and_saved_confirmation(browser_page,
     page.locator("#review-button").click()
     page.locator("#step-3").wait_for(state="visible")
     page.locator("#review-content").get_by_text(
-        "Napback-Auftrag und TrueNAS-Systemkonfiguration und App-Einrichtung", exact=True
+        "Napback-Auftrag und TrueNAS-Systemkonfiguration und App-Einrichtung und VM-Einrichtung", exact=True
     ).wait_for()
     with patch("napback.webapp.subprocess.run"):
         page.locator("#save-button").click()
         page.locator("#dashboard-content h2").get_by_text("Deine gespeicherte Auswahl").wait_for()
     config = core.Config.load(app.config_path)
     assert config.backup_truenas_config and config.backup_napback_config
-    assert config.backup_truenas_apps
+    assert config.backup_truenas_apps and config.backup_truenas_vms
     assert config.config_key_file == str(app.key_path())
     page.reload()
     page.locator("#dashboard-content").get_by_text(
         "Zusätzlich verschlüsselt:", exact=False
     ).wait_for()
     assert "App-Einrichtung" in page.locator("#dashboard-content").inner_text()
+    assert not errors
+
+
+def test_browser_virtual_disk_selection_and_file_mode_rejection(browser_page, tmp_path):
+    page, app, errors = browser_page
+    connect(page)
+    disk = page.get_by_role("checkbox", name="Vault/disk sichern", exact=True)
+    assert disk.is_enabled()
+    disk.check()
+    page.locator("#selection-report").get_by_text("Wird gesichert:", exact=False).wait_for()
+    page.locator("#selection-report").get_by_text("Stromausfall", exact=False).wait_for()
+    page.locator("#to-storage").click()
+    page.locator("#target").fill(str(tmp_path / "disk-backup"))
+    page.locator("input[name=storage][value=files]").check()
+    page.locator("#review-button").click()
+    page.locator("#selection-report").get_by_text("Virtuelle Festplatten benötigen", exact=False).wait_for()
+    assert not app.config_path.exists()
     assert not errors

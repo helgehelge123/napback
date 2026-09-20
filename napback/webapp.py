@@ -137,8 +137,6 @@ def sources_from_selection(catalog, selected):
         raise core.BackupError(
             "Die Datenbereiche haben sich geändert. Bitte die NAS-Liste neu laden."
         )
-    if any(available[name]["type"] != "filesystem" for name in selected):
-        raise core.BackupError("Virtuelle Festplatten (Zvols) werden noch nicht unterstützt.")
     roots = sorted(
         name for name in selected if name.rsplit("/", 1)[0] not in selected or "/" not in name
     )
@@ -164,7 +162,14 @@ def sources_from_selection(catalog, selected):
 def analyze(catalog, sources, storage="zfs_raw", prefix="", now=None):
     now = time.time() if now is None else now
     available = {d["name"]: d for d in catalog["datasets"]}
-    result = {"groups": [], "issues": [], "excluded": [], "count": 0, "referenced": 0}
+    result = {
+        "groups": [],
+        "issues": [],
+        "excluded": [],
+        "count": 0,
+        "referenced": 0,
+        "warnings": [],
+    }
     all_selected = set()
     for source in sources:
         root = source["dataset"]
@@ -191,16 +196,27 @@ def analyze(catalog, sources, storage="zfs_raw", prefix="", now=None):
             "unavailable": [],
         }
         volumes = [d["name"] for d in members if d["type"] != "filesystem"]
-        if volumes:
+        if volumes and storage == "zfs_raw":
+            result["warnings"].append(
+                "Virtuelle Festplatte: "
+                + ", ".join(volumes)
+                + ". VM-Einrichtung zusätzlich mitsichern. Laufende Gäste werden nicht heruntergefahren: Der Stand kann eine Reparatur wie nach Stromausfall benötigen. Alle Platten einer VM gemeinsam auswählen."
+            )
+        if volumes and storage == "files":
             group["issues"].append(
-                "Virtuelle Festplatten werden noch nicht unterstützt: " + ", ".join(volumes)
+                "Virtuelle Festplatten benötigen den verschlüsselten ZFS-Modus: "
+                + ", ".join(volumes)
             )
         unencrypted = [d["name"] for d in members if not d["encrypted"]]
         if storage == "zfs_raw" and unencrypted:
             group["issues"].append(
                 "Auf dem NAS nicht verschlüsselt: "
                 + ", ".join(unencrypted)
-                + ". Wähle diese Bereiche ab oder bewusst die unverschlüsselte Dateikopie."
+                + (
+                    ". Unverschlüsselte virtuelle Festplatten werden nicht unterstützt; wähle sie ab."
+                    if any(d["type"] == "volume" and not d["encrypted"] for d in members)
+                    else ". Wähle diese Bereiche ab oder bewusst die unverschlüsselte Dateikopie."
+                )
             )
         missing = [
             d["name"]
@@ -367,6 +383,7 @@ class Application:
             "backup_napback_config": False,
             "backup_truenas_config": False,
             "backup_truenas_apps": False,
+            "backup_truenas_vms": False,
         }
         defaults_file = self.config_path.with_name("ui-defaults.json")
         if defaults_file.exists():
@@ -488,6 +505,7 @@ class Application:
             backup_napback_config=payload.get("backup_napback_config", False),
             backup_truenas_config=payload.get("backup_truenas_config", False),
             backup_truenas_apps=payload.get("backup_truenas_apps", False),
+            backup_truenas_vms=payload.get("backup_truenas_vms", False),
             config_key_file=str(self.key_path()),
             host=self.probe.host,
             sudo=self.probe.sudo,
@@ -502,7 +520,12 @@ class Application:
         load_settings(data)
         if any(
             data[key]
-            for key in ("backup_napback_config", "backup_truenas_config", "backup_truenas_apps")
+            for key in (
+                "backup_napback_config",
+                "backup_truenas_config",
+                "backup_truenas_apps",
+                "backup_truenas_vms",
+            )
         ):
             from .settings_backup import key_bytes
 
@@ -569,6 +592,7 @@ class Application:
             "backup_napback_config": checked.backup_napback_config,
             "backup_truenas_config": checked.backup_truenas_config,
             "backup_truenas_apps": checked.backup_truenas_apps,
+            "backup_truenas_vms": checked.backup_truenas_vms,
         }
 
     def save(self, payload):
@@ -665,6 +689,7 @@ class Application:
             "backup_napback_config": config.backup_napback_config,
             "backup_truenas_config": config.backup_truenas_config,
             "backup_truenas_apps": config.backup_truenas_apps,
+            "backup_truenas_vms": config.backup_truenas_vms,
             "problem": friendly_error(core.BackupError(status["last_check"]["error"]))
             if (status.get("last_check") or {}).get("error")
             else None,

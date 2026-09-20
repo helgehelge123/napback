@@ -255,7 +255,7 @@ def test_restore_uses_unmounted_receive_without_force_and_checks_guid(raw_job):
     core.run(config, now=100000)
     path, manifest = core.completed(config)[0]
     with (
-        patch.object(core.Config, "remote", side_effect=["tank\n", "111\n", "aes-256-gcm\n"]),
+        patch.object(core.Config, "remote", side_effect=["tank\n", "111\n", "filesystem\n", "aes-256-gcm\n"]),
         patch.object(core, "command", return_value="") as command,
     ):
         result = raw.restore(config, path, manifest, "tank/new", None)
@@ -296,7 +296,7 @@ def test_raw_plan_accepts_locked_unmounted_datasets(tmp_path):
     core.write_json(config_path, settings)
     config = core.Config.load(config_path)
     responses = [
-        "tank/files\tnone\ntank/files/child\t/mnt/elsewhere\n",
+        "tank/files\tfilesystem\tnone\ntank/files/child\tfilesystem\t/mnt/elsewhere\n",
         "tank/files@auto-one\t100000\t111\ntank/files/child@auto-one\t100000\t222\n",
         "aes-256-gcm\n",
         "aes-256-gcm\n",

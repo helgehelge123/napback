@@ -181,6 +181,7 @@ function draft() {
     backup_napback_config: $("backup-napback").checked,
     backup_truenas_config: $("backup-truenas").checked,
     backup_truenas_apps: $("backup-apps").checked,
+    backup_truenas_vms: $("backup-vms").checked,
     key_confirmed: $("key-confirmed").checked,
     selected: [...state.selected],
     target: $("target").value.trim(),
@@ -192,7 +193,7 @@ function draft() {
 }
 function supported(d) {
   return (
-    d.type === "filesystem" &&
+    ["filesystem", "volume"].includes(d.type) &&
     !["boot-pool", "freenas-boot"].includes(d.name.split("/")[0])
   );
 }
@@ -303,16 +304,12 @@ function renderTree() {
       node(
         "small",
         bytes(d.referenced) +
-          " Daten · " +
+          (d.type === "volume" ? " · Virtuelle Festplatte · " : " Daten · ") +
           (d.encrypted ? "verschlüsselt" : "unverschlüsselt"),
       ),
     );
     let issue = "";
-    if (!supported(d))
-      issue =
-        d.type === "volume"
-          ? "Virtuelle Festplatte: noch nicht unterstützt"
-          : "Boot-System: separat wiederherstellen";
+    if (!supported(d)) issue = "Boot-System: separat wiederherstellen";
     else if (!d.snapshots.length) issue = "Kein Snapshot vorhanden";
     else if (taskExclusions(d.name).length)
       issue = "Im TrueNAS-Auftrag ausgeschlossen";
@@ -429,6 +426,7 @@ function renderReport(report, target) {
     }
     target.append(box);
   }
+  for (const warning of report.warnings || []) target.append(node("p", warning, "warning"));
   if (report.excluded.length) {
     const info = node("details", null, "help");
     info.append(
@@ -547,7 +545,7 @@ function renderReview(r) {
   const list = node("dl", null, "summary-list");
   const items = [
     ["Auftrag", r.label],
-    ["Einstellungen mitsichern", [r.backup_napback_config ? "Napback-Auftrag" : "", r.backup_truenas_config ? "TrueNAS-Systemkonfiguration" : "", r.backup_truenas_apps ? "App-Einrichtung" : ""].filter(Boolean).join(" und ") || "Aus"],
+    ["Einstellungen mitsichern", [r.backup_napback_config ? "Napback-Auftrag" : "", r.backup_truenas_config ? "TrueNAS-Systemkonfiguration" : "", r.backup_truenas_apps ? "App-Einrichtung" : "", r.backup_truenas_vms ? "VM-Einrichtung" : ""].filter(Boolean).join(" und ") || "Aus"],
     ["Von", r.host],
     ["Auf Deinen PC", r.target],
     [
@@ -703,8 +701,8 @@ async function dashboard() {
           : "Die Backups liegen als unverschlüsselte Dateien vor.",
       ),
     );
-    if (r.backup_napback_config || r.backup_truenas_config || r.backup_truenas_apps) {
-      card.append(node("p", "Zusätzlich verschlüsselt: " + [r.backup_napback_config ? "Napback-Auftrag" : "", r.backup_truenas_config ? "TrueNAS-Systemkonfiguration" : "", r.backup_truenas_apps ? "App-Einrichtung" : ""].filter(Boolean).join(" und ") + ". Mit jeder Sicherung, mindestens einmal täglich bei erreichbarem NAS."));
+    if (r.backup_napback_config || r.backup_truenas_config || r.backup_truenas_apps || r.backup_truenas_vms) {
+      card.append(node("p", "Zusätzlich verschlüsselt: " + [r.backup_napback_config ? "Napback-Auftrag" : "", r.backup_truenas_config ? "TrueNAS-Systemkonfiguration" : "", r.backup_truenas_apps ? "App-Einrichtung" : "", r.backup_truenas_vms ? "VM-Einrichtung" : ""].filter(Boolean).join(" und ") + ". Mit jeder Sicherung, mindestens einmal täglich bei erreichbarem NAS."));
     }
     const ul = node("ul");
     for (const source of r.sources) {
@@ -815,12 +813,13 @@ async function profileList() {
   sessionStorage.setItem("napback-profile", state.profile);
 }
 function configOptions() {
-  $("config-key-options").hidden = !$("backup-napback").checked && !$("backup-truenas").checked && !$("backup-apps").checked;
+  $("config-key-options").hidden = !$("backup-napback").checked && !$("backup-truenas").checked && !$("backup-apps").checked && !$("backup-vms").checked;
   state.review = null;
 }
 $("backup-napback").onchange = configOptions;
 $("backup-truenas").onchange = configOptions;
 $("backup-apps").onchange = configOptions;
+$("backup-vms").onchange = configOptions;
 $("download-key").onclick = async () => {
   try {
     const response = await fetch("/api/recovery-key", {method: "POST", headers: {"X-Napback-Token": token, "X-Napback-Profile": state.profile, "Content-Type": "application/json"}, body: "{}"});
@@ -874,7 +873,8 @@ async function boot() {
     $("backup-napback").checked = d.backup_napback_config;
     $("backup-truenas").checked = d.backup_truenas_config;
     $("backup-apps").checked = d.backup_truenas_apps;
-    $("key-confirmed").checked = state.initial.configured && (d.backup_napback_config || d.backup_truenas_config || d.backup_truenas_apps);
+    $("backup-vms").checked = d.backup_truenas_vms;
+    $("key-confirmed").checked = state.initial.configured && (d.backup_napback_config || d.backup_truenas_config || d.backup_truenas_apps || d.backup_truenas_vms);
     configOptions();
     $("address").value = "";
     $("username").value = "";

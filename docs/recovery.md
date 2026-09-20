@@ -107,3 +107,7 @@ recover from a verified independent copy. SHA-256 inventories detect accidental
 corruption but are not signed; an attacker with repository write access can
 rewrite both the data and inventory. Keep an independent or offline copy for
 protection against that scenario.
+
+## Virtual machines
+
+Encrypted virtual disks are supported from 0.7. Select their zvols and enable **VM-Einrichtung mitsichern**. Restore disks into new ZFS names, then recreate the VM from the encrypted settings export. No VM is started automatically. See the [VM backup and recovery guide](virtual-machines.md) for firmware, multi-disk consistency, keys and safe first-boot instructions.

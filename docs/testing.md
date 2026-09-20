@@ -295,3 +295,25 @@ docker run --rm --network none --read-only \
 For NAS tests, use a dedicated synthetic dataset and a separate destination.
 Never point interruption or mutation tests at production data. Retain the test
 logs and verify both the restored contents and the old versions after failure.
+
+
+## Version 0.7: virtual disks and VM settings
+
+Added actual encrypted zvol full/incremental send, keep=1 retention, receive to a
+new hidden volume, original-key unlock, complete 64-MiB block hash comparison,
+and an isolated QEMU boot from the restored disk on TrueNAS 25.10. The restored
+test volume was hidden and locked again afterward. Existing production VMs were
+not paused, stopped or started.
+
+Automated coverage includes recursive volume selection, refusal in file mode,
+volume-specific receive properties, manifest type mismatch, encrypted VM
+settings roundtrip, daily settings refresh, preserved previous backups on export
+failure, missing UEFI/TPM state, active TPM refusal, symlinks, concurrent settings
+changes, size limits, firmware corruption and secret-free error messages.
+Browser coverage includes selecting a virtual disk, refusing file mode, and
+saving/reloading the encrypted VM settings option.
+
+A read-only real VM settings export captured three definitions and one existing
+UEFI variable store. No production guest application restore, TPM/BitLocker
+restore, or automated VM registration was tested. Firmware/settings capture time
+can differ from disk snapshot time; this is stated in the interface and guide.
