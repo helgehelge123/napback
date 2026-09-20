@@ -73,3 +73,14 @@ configuration. Writes back up the old config. The browser cannot execute arbitra
 shell commands or create/modify NAS snapshot tasks. Disabling automatic checks
 stops only the timer, never an active transfer. Dataset exclusions are explicit
 and are shown in the review; encryption checks are never relaxed automatically.
+
+## Configuration exports
+
+Optional NAS configuration exports include sensitive settings and the password
+secret seed. They are downloaded using the existing SSH connection and TrueNAS
+loopback download service. Tokens never leave the NAS or enter logs. Plaintext
+is held in memory and encrypted with `cryptography.fernet.Fernet` before any PC
+file is written. The local recovery key has mode 600 and is outside backup targets;
+users must retain a separate recovery copy. This protects copied archives without
+the key, not a compromised user account or root on the PC. Restoration is explicit
+and writes a new mode-600 file; it never applies NAS settings or overwrites a file.

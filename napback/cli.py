@@ -108,6 +108,12 @@ def main(argv=None):
         "--terminal", action="store_true", help="Use the legacy terminal wizard"
     )
     commands.add_parser("ui", help="Open the local backup interface in your browser")
+    decrypt = commands.add_parser(
+        "decrypt-config", help="Recover an encrypted settings export to a new file"
+    )
+    decrypt.add_argument("source", type=Path)
+    decrypt.add_argument("destination", type=Path)
+    decrypt.add_argument("--key", required=True, type=Path)
     serve_parser = commands.add_parser("serve", help="Run the local browser interface server")
     serve_parser.add_argument("--port", type=int, default=0)
     commands.add_parser("tray", help="Show background status in the desktop system tray")
@@ -153,11 +159,15 @@ def main(argv=None):
 
     signal.signal(signal.SIGTERM, interrupted)
     try:
-        if args.action == "tray":
+        if args.action == "decrypt-config":
+            from .settings_backup import decrypt_file
+
+            result = decrypt_file(args.source, args.key, args.destination)
+        elif args.action == "tray":
             from .tray import main as tray_main
 
             return tray_main(args.config)
-        if args.action == "install-tray":
+        elif args.action == "install-tray":
             from .desktop import install_tray
 
             result = install_tray(args.config)

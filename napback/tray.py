@@ -108,6 +108,7 @@ class TrayController:
 
     def refresh(self):
         details = ""
+        self.multiple_profiles = False
         try:
             if not self.config_path.exists():
                 self.config = None
@@ -129,6 +130,35 @@ class TrayController:
                         details += self.tr(" · ZFS encrypted", " · ZFS-verschlüsselt")
                     else:
                         details += self.tr(" · Unencrypted files", " · Unverschlüsselte Dateien")
+            from .profiles import paths
+
+            configured_paths = [path for _, path in paths(self.config_path) if path.exists()]
+            self.multiple_profiles = len(configured_paths) > 1 or (
+                bool(configured_paths) and configured_paths[0] != self.config_path
+            )
+            if self.multiple_profiles:
+                states = []
+                for path in configured_paths:
+                    config = core.Config.load(path)
+                    status = core.status(config)
+                    state = (status.get("last_check") or {}).get("status", "ready")
+                    states.append("running" if status.get("running") else state)
+                    if self.config is None:
+                        self.config = config
+                priority = (
+                    "failed",
+                    "interrupted",
+                    "running",
+                    "checking",
+                    "ready",
+                    "completed",
+                    "no_new_snapshot",
+                )
+                self.state = next((state for state in priority if state in states), "ready")
+                details = self.tr(
+                    f"{len(configured_paths)} jobs · Open the browser for details",
+                    f"{len(configured_paths)} Aufträge · Details im Browser",
+                )
         except (core.BackupError, OSError, ValueError) as error:
             self.state = "failed"
             details = str(error)
@@ -138,12 +168,21 @@ class TrayController:
         self.tray.setToolTip("Napback — " + label + ("\n" + details[:300] if details else ""))
         self.tray.setIcon(tray_icon(self.state))
         self.check_action.setEnabled(
-            self.config is not None and self.state not in ("checking", "running")
+            self.config is not None
+            and (self.multiple_profiles or self.state not in ("checking", "running"))
         )
-        self.folder_action.setEnabled(self.config is not None)
-        self.interval_action.setEnabled(self.config is not None)
+        self.check_action.setText(
+            self.tr("Manage jobs…", "Aufträge verwalten…")
+            if self.multiple_profiles
+            else self.tr("Check now", "Jetzt prüfen")
+        )
+        self.folder_action.setEnabled(self.config is not None and not self.multiple_profiles)
+        self.interval_action.setEnabled(self.config is not None and not self.multiple_profiles)
 
     def check_now(self):
+        if self.multiple_profiles:
+            self.open_config()
+            return
         if self.process and self.process.state() != QProcess.ProcessState.NotRunning:
             return
         self.output = bytearray()
@@ -235,6 +274,8 @@ class TrayController:
                 "napback.service",
                 "-u",
                 "napback-manual-*.service",
+                "-u",
+                "napback-*.service",
                 "-n",
                 "80",
                 "--no-pager",

@@ -1,5 +1,29 @@
 # Validation record
 
+## Version 0.5: multiple jobs and configuration exports
+
+**138 tests passed** locally, including five real Chromium interaction tests.
+Coverage includes copying a job, separate repository IDs and timer names, mixed
+storage modes, destination overlap rejection, advanced SSH-option preservation,
+profile routing across tabs, recovery-key download and confirmation, daily
+settings refresh without another ZFS send, wrong keys, tampered ciphertext,
+failed exports, and aggregate tray status. Ruff and JavaScript syntax checks pass.
+
+Two isolated jobs were also run against an actual TrueNAS 25.10.7 system via the
+web backend, each with its own systemd timer and independent background service.
+One copied existing encrypted ZFS parent/child test datasets; the other copied
+existing ordinary test datasets as readable files. Both included real official
+TrueNAS configuration exports and encrypted Napback settings. Full archive
+verification and in-memory decryption/validation of both configuration exports
+succeeded. Only isolated test timers were disabled afterwards; production backup
+settings and NAS services were not modified.
+
+This validates exporting and decrypting the NAS configuration, not importing it
+into a replacement NAS or booting restored hardware. Settings plaintext was never
+written to disk during the real export tests. Dataset tests used existing
+synthetic fixtures; the NAS configuration export necessarily contains real NAS
+settings, retained only as a private encrypted local test artifact.
+
 ## Version 0.4: local browser interface
 
 On CachyOS, **123 tests passed**, including all three Chromium browser tests.

@@ -808,3 +808,8 @@ dialog::backdrop {
     margin-bottom: 10px;
   }
 }
+
+.profile-bar { margin-bottom: 24px; }
+.profile-bar > label { max-width: 640px; }
+.profile-bar > small { display: block; margin-top: 12px; }
+.settings-options { margin: 24px 0; padding: 18px; border: 1px solid #d8e2df; border-radius: 12px; }

@@ -6,6 +6,9 @@ LUKS und ZFS auf dem PC sind nicht nötig. Standardmäßig jede Minute; das Inte
 Einrichtung und später im Tray ändern. Neue Snapshots werden ohne 24-Stunden-Wartezeit
 gesichert. Unveränderte Snapshots erzeugen keine weitere lokale Version.
 
+Für mehrere Kopien, verschiedene Speicherarten und die optionale TrueNAS-
+Konfigurationssicherung siehe [Mehrere Aufträge und Einstellungen](multiple-backups.md).
+
 ## Installieren
 
 Quellarchiv von den [GitHub-Releases](https://github.com/helgehelge123/napback/releases)

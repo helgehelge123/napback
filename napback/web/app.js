@@ -7,6 +7,7 @@ if (location.hash) {
   history.replaceState(null, "", location.pathname);
 }
 const state = {
+  profile: sessionStorage.getItem("napback-profile") || "default",
   initial: null,
   catalog: null,
   selected: new Set(),
@@ -36,7 +37,7 @@ function notice(text) {
   $("notice").hidden = false;
 }
 async function api(path, data) {
-  const options = { headers: { "X-Napback-Token": token } };
+  const options = { headers: { "X-Napback-Token": token, "X-Napback-Profile": state.profile } };
   if (data !== undefined) {
     options.method = "POST";
     options.headers["Content-Type"] = "application/json";
@@ -176,6 +177,10 @@ function connectionData() {
 }
 function draft() {
   return {
+    label: $("profile-label").value.trim(),
+    backup_napback_config: $("backup-napback").checked,
+    backup_truenas_config: $("backup-truenas").checked,
+    key_confirmed: $("key-confirmed").checked,
     selected: [...state.selected],
     target: $("target").value.trim(),
     storage: document.querySelector("input[name=storage]:checked").value,
@@ -540,6 +545,8 @@ function renderReview(r) {
   host.replaceChildren();
   const list = node("dl", null, "summary-list");
   const items = [
+    ["Auftrag", r.label],
+    ["Einstellungen mitsichern", [r.backup_napback_config ? "Napback-Auftrag" : "", r.backup_truenas_config ? "TrueNAS-Systemkonfiguration" : ""].filter(Boolean).join(" und ") || "Aus"],
     ["Von", r.host],
     ["Auf Deinen PC", r.target],
     [
@@ -604,7 +611,7 @@ function renderReview(r) {
     node(
       "div",
       r.storage === "zfs_raw"
-        ? "Zur Wiederherstellung brauchst Du TrueNAS/ZFS und die ursprünglichen ZFS-Schlüssel. Die Schlüssel werden nicht auf Deinen PC kopiert."
+        ? "Zur Wiederherstellung brauchst Du TrueNAS/ZFS und die ursprünglichen ZFS-Schlüssel. Bewahre diese separat auf. Ein gewählter TrueNAS-Konfigurationsexport kann gespeicherte Schlüssel enthalten und wird zusätzlich verschlüsselt."
         : "Diese Sicherung ist auf Deinem PC unverschlüsselt und direkt lesbar.",
       "info",
     ),
@@ -623,6 +630,7 @@ $("save-button").addEventListener("click", async () => {
     );
     state.review = null;
     state.initial = await api("initial");
+    await profileList();
     notice(
       result.warning ||
         "Gespeichert. Deine Einstellungen sind übernommen. Den Stand siehst Du unten.",
@@ -685,6 +693,7 @@ async function dashboard() {
     const card = node("div", null, "card");
     card.append(
       node("h2", "Deine gespeicherte Auswahl"),
+      node("h3", r.label),
       node("p", "Ziel: " + r.target, "mono"),
       node(
         "p",
@@ -693,6 +702,9 @@ async function dashboard() {
           : "Die Backups liegen als unverschlüsselte Dateien vor.",
       ),
     );
+    if (r.backup_napback_config || r.backup_truenas_config) {
+      card.append(node("p", "Zusätzlich verschlüsselt: " + [r.backup_napback_config ? "Napback-Auftrag" : "", r.backup_truenas_config ? "TrueNAS-Systemkonfiguration" : ""].filter(Boolean).join(" und ") + ". Mit jeder Sicherung, mindestens einmal täglich bei erreichbarem NAS."));
+    }
     const ul = node("ul");
     for (const source of r.sources) {
       const li = node("li", source.dataset || source.path);
@@ -789,12 +801,87 @@ $("close-snapshots").onclick = () => $("snapshot-dialog").close();
 $("nav-setup").onclick = () => step(state.step);
 $("nav-status").onclick = dashboard;
 $("nav-restore").onclick = () => page("restore");
+async function profileList() {
+  const profiles = await api("profiles");
+  if (!profiles.some(p => p.id === state.profile)) state.profile = "default";
+  $("profile-choice").replaceChildren();
+  for (const p of profiles) {
+    const option = node("option", p.label + (p.configured ? "" : " (noch nicht gespeichert)"));
+    option.value = p.id;
+    $("profile-choice").append(option);
+  }
+  $("profile-choice").value = state.profile;
+  sessionStorage.setItem("napback-profile", state.profile);
+}
+function configOptions() {
+  $("config-key-options").hidden = !$("backup-napback").checked && !$("backup-truenas").checked;
+  state.review = null;
+}
+$("backup-napback").onchange = configOptions;
+$("backup-truenas").onchange = configOptions;
+$("download-key").onclick = async () => {
+  try {
+    const response = await fetch("/api/recovery-key", {method: "POST", headers: {"X-Napback-Token": token, "X-Napback-Profile": state.profile, "Content-Type": "application/json"}, body: "{}"});
+    if (!response.ok) throw new Error((await response.json()).error);
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "napback-recovery.key";
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    notice("Schlüssel heruntergeladen. Bewahre ihn sicher und getrennt vom PC auf. Er bleibt zusätzlich lokal verfügbar, damit die Automatik sichern kann.");
+  } catch(e) { error(e); }
+};
+async function switchProfile(ident) {
+  if (state.busy) return;
+  clearTimeout(previewTimer);
+  state.profile = ident;
+  sessionStorage.setItem("napback-profile", ident);
+  state.catalog = null;
+  state.connection = null;
+  state.selected = new Set();
+  state.review = null;
+  $("notice").hidden = true;
+  $("search").value = "";
+  $("selection-report").replaceChildren();
+  await boot();
+}
+$("profile-choice").onchange = () => switchProfile($("profile-choice").value);
+async function createProfile(copy) {
+  try {
+    const result = await api("profiles", {copy});
+    await switchProfile(result.profile);
+    notice(copy ? "Kopie vorbereitet. Wähle einen neuen Zielordner. Der ursprüngliche Auftrag bleibt erhalten." : "Neuer Auftrag vorbereitet. Gespeichert wird erst nach Deiner Prüfung.");
+  } catch(e) { error(e); }
+}
+$("new-profile").onclick = () => createProfile(false);
+$("copy-profile").onclick = () => createProfile(true);
 async function boot() {
   try {
+    // Saved tabs can outlive discarded draft jobs after a server restart.
+    const savedProfile = state.profile;
+    state.profile = "default";
+    const available = await api("profiles");
+    state.profile = available.some(p => p.id === savedProfile) ? savedProfile : "default";
+    await profileList();
     state.initial = await api("initial");
     const d = state.initial.defaults;
     $("version").textContent = "Version " + state.initial.version;
     $("footer-version").textContent = state.initial.version;
+    $("profile-label").value = d.label;
+    $("backup-napback").checked = d.backup_napback_config;
+    $("backup-truenas").checked = d.backup_truenas_config;
+    $("key-confirmed").checked = state.initial.configured && (d.backup_napback_config || d.backup_truenas_config);
+    configOptions();
+    $("address").value = "";
+    $("username").value = "";
+    $("alias").value = "";
+    $("key-custom").value = "";
+    $("key-custom-row").hidden = true;
+    $("key-choice").replaceChildren();
+    for (const [value, label] of [["", "Automatisch finden"], ["custom", "Andere Schlüsseldatei …"]]) {
+      const option = node("option", label); option.value = value; $("key-choice").append(option);
+    }
     const at = (d.host || "").lastIndexOf("@");
     if (at >= 0) {
       $("username").value = d.host.slice(0, at);
@@ -819,7 +906,7 @@ async function boot() {
     $("target").value = d.target;
     $("minutes").value = d.check_interval_minutes;
     $("keep").value = d.keep;
-    $("automatic").checked = state.initial.configured ? d.automatic : true;
+    $("automatic").checked = d.automatic;
     document.querySelector(
       'input[name=storage][value="' +
         (d.storage === "files" ? "files" : "zfs_raw") +

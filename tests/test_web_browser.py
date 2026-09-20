@@ -104,3 +104,83 @@ def test_browser_folder_picker_and_mobile_layout(browser_page):
     assert page.locator("#target").input_value().endswith("/My Backup")
     assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
     assert not errors
+
+
+def test_browser_duplicate_changes_storage_and_preserves_original(browser_page):
+    page, app, errors = browser_page
+    connect(page)
+    page.get_by_role("checkbox", name="Vault/photos sichern", exact=True).check()
+    page.locator("#selection-report").get_by_text("Wird gesichert:", exact=False).wait_for()
+    page.locator("#to-storage").click()
+    page.locator("#target").fill(str(app.config_path.parent / "first-copy"))
+    page.locator("#automatic").uncheck()
+    page.locator("#review-button").click()
+    page.locator("#step-3").wait_for(state="visible")
+    with patch("napback.webapp.subprocess.run"):
+        page.locator("#save-button").click()
+        page.locator("#dashboard-content h2").get_by_text("Deine gespeicherte Auswahl").wait_for()
+    before = app.config_path.read_bytes()
+    page.locator("#copy-profile").click()
+    page.locator("#step-0").wait_for(state="visible")
+    page.locator("#notice").get_by_text("Kopie vorbereitet.", exact=False).wait_for()
+    ident = page.locator("#profile-choice").input_value()
+    assert ident != "default"
+    assert page.locator("#target").input_value() == ""
+    assert not page.locator("#automatic").is_checked()
+    page.locator("#profile-label").fill("Lesbare USB-Kopie")
+    page.locator("#connect-button").click()
+    page.locator("#selection-report").get_by_text("Wird gesichert:", exact=False).wait_for()
+    assert page.get_by_role("checkbox", name="Vault/photos sichern", exact=True).is_checked()
+    page.locator("#to-storage").click()
+    page.locator("input[name=storage][value=files]").check()
+    page.locator("#target").fill(str(app.config_path.parent / "second-copy"))
+    page.locator("#review-button").click()
+    page.locator("#step-3").wait_for(state="visible")
+    page.locator("#review-content").get_by_text("Unverschlüsselte Dateien", exact=True).wait_for()
+    with patch("napback.webapp.subprocess.run"):
+        page.locator("#save-button").click()
+        page.locator("#dashboard-content h2").get_by_text("Deine gespeicherte Auswahl").wait_for()
+    assert app.config_path.read_bytes() == before
+    second = core.Config.load(app.profiles.get(ident).config_path)
+    assert second.storage == "files" and second.label == "Lesbare USB-Kopie"
+    page.reload()
+    page.locator("#dashboard-content h3").get_by_text("Lesbare USB-Kopie", exact=True).wait_for()
+    page.locator("#profile-choice").select_option("default")
+    page.locator("#dashboard-content").get_by_text(
+        "Die Backups sind verschlüsselte ZFS-Archive.", exact=True
+    ).wait_for()
+    assert not errors
+
+
+def test_browser_config_backup_requires_key_and_saved_confirmation(browser_page, tmp_path):
+    page, app, errors = browser_page
+    connect(page)
+    page.get_by_role("checkbox", name="Vault/photos sichern", exact=True).check()
+    page.locator("#selection-report").get_by_text("Wird gesichert:", exact=False).wait_for()
+    page.locator("#to-storage").click()
+    page.locator("#target").fill(str(tmp_path / "with-settings"))
+    page.locator("#automatic").uncheck()
+    page.locator("#backup-napback").check()
+    page.locator("#backup-truenas").check()
+    page.locator("#review-button").click()
+    page.locator("#error-text").get_by_text(
+        "Lade den Wiederherstellungsschlüssel", exact=False
+    ).wait_for()
+    assert not app.config_path.exists()
+    with page.expect_download() as downloaded:
+        page.locator("#download-key").click()
+    downloaded.value.save_as(tmp_path / "download.key")
+    assert (tmp_path / "download.key").read_bytes().strip() == app.key_path().read_bytes().strip()
+    page.locator("#key-confirmed").check()
+    page.locator("#review-button").click()
+    page.locator("#step-3").wait_for(state="visible")
+    page.locator("#review-content").get_by_text(
+        "Napback-Auftrag und TrueNAS-Systemkonfiguration", exact=True
+    ).wait_for()
+    with patch("napback.webapp.subprocess.run"):
+        page.locator("#save-button").click()
+        page.locator("#dashboard-content h2").get_by_text("Deine gespeicherte Auswahl").wait_for()
+    config = core.Config.load(app.config_path)
+    assert config.backup_truenas_config and config.backup_napback_config
+    assert config.config_key_file == str(app.key_path())
+    assert not errors

@@ -1,4 +1,4 @@
-"""Transactional, pull-only, directory-based backups. No Python dependencies."""
+"""Transactional, pull-only, directory-based backups."""
 
 from __future__ import annotations
 
@@ -147,6 +147,10 @@ class Config:
     docker_image: str | None = None
     snapshot_max_age_hours: float = 48
     snapshot_prefix: str = "auto-"
+    label: str = "Mein Backup"
+    backup_napback_config: bool = False
+    backup_truenas_config: bool = False
+    config_key_file: str | None = None
 
     @classmethod
     def load(cls, filename):
@@ -162,6 +166,17 @@ class Config:
             raise BackupError(str(error)) from error
         config.target = absolute(config.target, "target")
         config.mountpoint = absolute(config.mountpoint, "mountpoint")
+        if not isinstance(config.label, str) or not config.label.strip() or len(config.label) > 100:
+            raise BackupError("label must contain 1 to 100 characters")
+        for field in ("backup_napback_config", "backup_truenas_config"):
+            if not isinstance(getattr(config, field), bool):
+                raise BackupError(f"{field} must be a boolean")
+        if config.backup_truenas_config and not config.host:
+            raise BackupError("TrueNAS configuration backup requires SSH")
+        if config.backup_napback_config or config.backup_truenas_config:
+            key_path = absolute(config.config_key_file, "config_key_file")
+            if key_path == config.target or config.target in key_path.parents:
+                raise BackupError("Keep the configuration recovery key outside the backup target")
         if config.storage not in ("files", "zfs_raw"):
             raise BackupError("storage must be files or zfs_raw")
         if (
@@ -304,8 +319,12 @@ class Config:
             "bandwidth_limit_kib",
             "io_timeout_seconds",
             "raw_full_every",
+            "label",
         ):
             data.pop(key)
+        if not self.backup_napback_config and not self.backup_truenas_config:
+            for key in ("backup_napback_config", "backup_truenas_config", "config_key_file"):
+                data.pop(key)
         if self.storage == "files":
             data.pop("storage")  # Preserve existing directory-backup fingerprints.
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
@@ -758,7 +777,10 @@ def _checked_run(config, entries, check_state, force, started, now):
         return {"status": "not_due", "last_success": entries[-1][1]["completed_at"]}
     if snapshot_mode:
         sources = plan_sources(config, started)
-        if not force and same_sources(config, entries, sources):
+        settings_due = (config.backup_napback_config or config.backup_truenas_config) and (
+            not entries or started - entries[-1][1]["completed_at"] >= 86400
+        )
+        if not force and not settings_due and same_sources(config, entries, sources):
             check_state["status"] = "no_new_snapshot"
             check_state["sources"] = [asdict(source) for source in sources]
             return {"status": "no_new_snapshot", "last_success": entries[-1][1]["completed_at"]}
@@ -807,6 +829,10 @@ def _checked_run(config, entries, check_state, force, started, now):
                     raise BackupError(f"Verification failed for {source.name}: {changes[:1500]}")
         from .integrity import record
 
+        if config.backup_napback_config or config.backup_truenas_config:
+            from .settings_backup import backup_settings
+
+            backup_settings(config, stage)
         inventory_sha256 = record(stage)
         finished = time.time() if now is None else now
         manifest = {

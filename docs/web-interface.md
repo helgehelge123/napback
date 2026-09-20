@@ -3,6 +3,13 @@
 Öffne Napback im Anwendungsmenü oder doppelklicke auf das Tray-Symbol. `napback ui`
 oder `napback setup` öffnet dieselbe Oberfläche. Sie läuft nur auf Deinem PC.
 
+## Mehrere Aufträge und zusätzliche Kopien
+
+Oben wählst Du einen Auftrag oder legst über **Neuer Auftrag** einen weiteren an.
+**Auftrag kopieren** übernimmt die gespeicherte Auswahl; wähle danach einen
+eigenen Zielordner. Jeder Auftrag hat eine eigene Speicherart und Automatik.
+[Ausführliche Anleitung mit Konfigurationssicherung](multiple-backups.md).
+
 ## 1. NAS verbinden
 
 Die **NAS-Adresse** ist die Adresse Deiner TrueNAS-Weboberfläche, ohne `https://`.
@@ -56,6 +63,11 @@ ZFS-System und die ursprünglichen ZFS-Schlüssel; bewahre diese separat auf.
 **Als lesbare Dateien speichern** erzeugt unverschlüsselte Kopien. Wähle das nur,
 wenn Du diese Speicherung bewusst möchtest. Die Oberfläche wechselt bei Problemen
 niemals selbst in den unverschlüsselten Modus.
+
+Unter **Einstellungen mitsichern** kannst Du diesen Napback-Auftrag und/oder die
+TrueNAS-Systemkonfiguration ergänzen. Beide werden separat verschlüsselt. Lade
+den Wiederherstellungsschlüssel herunter und bewahre ihn zusätzlich außerhalb
+des PCs auf. Ohne ihn sind diese Konfigurationskopien nicht wiederherstellbar.
 
 Das **Minutenintervall** bestimmt, wie oft nach neuen Ständen geschaut wird. Ohne
 neuen Snapshot wird nichts kopiert. **Gespeicherte Stände behalten** bestimmt die

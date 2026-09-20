@@ -33,6 +33,13 @@ unencrypted NAS dataset. Existing 0.1/0.2 configurations retain their `files`
 behavior; converting requires a **new target repository**, so old plaintext
 cannot be mistaken for an encrypted archive. See [migration](docs/encryption.md).
 
+## Multiple copies and system settings
+
+Use **Neuer Auftrag** or **Auftrag kopieren** in the browser. Each job has its own
+selection, destination, storage mode and timer. Optional configuration exports are
+always encrypted separately; download and keep the recovery key away from the PC.
+See the [German guide](docs/multiple-backups.md) for details and recovery.
+
 ## Features
 
 - PC-initiated SSH pull with strict host-key checking; no inbound PC port or new NAS listener.
@@ -44,7 +51,9 @@ cannot be mistaken for an encrypted archive. See [migration](docs/encryption.md)
 - SHA-256 inventory, explicit verification, failed-transfer retry and one writer at a time.
 - Local browser setup with real snapshot examples, dataset checkboxes, explicit exclusions and saved configuration.
 - KDE-compatible system tray with status, check now, folder, interval, setup and logs.
-- Python standard-library engine; optional PyQt6 tray. MIT licensed, no cloud account.
+- Multiple named jobs, independent copies and separate encrypted/plaintext destinations.
+- Optional encrypted Napback and TrueNAS configuration exports with a downloadable recovery key.
+- Python engine, `cryptography` for settings exports and optional PyQt6 tray. MIT licensed, no cloud account.
 
 ## Requirements
 

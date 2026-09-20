@@ -299,6 +299,21 @@ class Application:
         self.jobs = {}
         self.lock = threading.Lock()
         self.operation = threading.Lock()
+        self.draft_defaults = {}
+        self.inherited_settings = {}
+        self.profiles = None
+        self.profile_id = "default"
+
+    def key_path(self):
+        if self.config_path.exists():
+            config = core.Config.load(self.config_path)
+            if config.config_key_file:
+                return Path(config.config_key_file)
+        return (
+            self.profiles.key_path
+            if self.profiles
+            else self.config_path.with_suffix(".recovery-key")
+        )
 
     def timer_unit(self):
         from .cli import default_config
@@ -346,11 +361,15 @@ class Application:
             "check_interval_minutes": 1,
             "keep": 30,
             "automatic": False,
+            "label": "Mein Backup",
+            "backup_napback_config": False,
+            "backup_truenas_config": False,
         }
         defaults_file = self.config_path.with_name("ui-defaults.json")
         if defaults_file.exists():
             saved = core.read_json(defaults_file)
             defaults.update({key: value for key, value in saved.items() if key in defaults})
+        defaults.update(self.draft_defaults)
         existing = None
         if self.config_path.exists():
             config = core.Config.load(self.config_path)
@@ -382,6 +401,8 @@ class Application:
             "defaults": defaults,
             "keys": sorted(keys),
             "config_path": str(self.config_path),
+            "key_ready": self.key_path().is_file(),
+            "profile": self.profile_id,
         }
 
     def connect(self, payload):
@@ -390,8 +411,12 @@ class Application:
         self.catalog = None
         probe = connection(payload)
         # Keep advanced SSH options when editing an existing connection unchanged.
-        if self.config_path.exists():
-            old = core.Config.load(self.config_path)
+        if self.config_path.exists() or self.inherited_settings:
+            old = (
+                core.Config.load(self.config_path)
+                if self.config_path.exists()
+                else load_settings(self.inherited_settings)
+            )
             options = old.ssh_options or []
             old_key = (
                 options[options.index("-i") + 1]
@@ -424,6 +449,8 @@ class Application:
                 "Wähle den Zielordner mit „Ordner auswählen“ oder gib einen vollständigen Pfad mit / oder ~/ am Anfang ein."
             )
         target = str(target_path)
+        if self.profiles:
+            self.profiles.check_target(self.profile_id, target_path)
         existing = core.Config.load(self.config_path) if self.config_path.exists() else None
         if existing and str(existing.target) == target:
             if existing.storage != storage:
@@ -437,7 +464,16 @@ class Application:
             sources = [{**s, "name": old_names.get(s["dataset"], s["name"])} for s in sources]
         else:
             Guide("de").destination(target)
-            data = {"target": target, "mountpoint": "/", "repository_id": str(uuid.uuid4())}
+            data = {
+                **(
+                    core.read_json(self.config_path)
+                    if existing
+                    else copy.deepcopy(self.inherited_settings)
+                ),
+                "target": target,
+                "mountpoint": "/",
+                "repository_id": str(uuid.uuid4()),
+            }
         minutes = Guide("de").interval(str(payload.get("check_interval_minutes", 1)))
         keep = payload.get("keep", 30)
         if isinstance(keep, bool) or not isinstance(keep, int) or keep < 0:
@@ -445,6 +481,10 @@ class Application:
                 "Die Anzahl gespeicherter Stände muss 0 oder größer sein. 0 bedeutet alle behalten."
             )
         data.update(
+            label=str(payload.get("label", "Mein Backup")).strip(),
+            backup_napback_config=payload.get("backup_napback_config", False),
+            backup_truenas_config=payload.get("backup_truenas_config", False),
+            config_key_file=str(self.key_path()),
             host=self.probe.host,
             sudo=self.probe.sudo,
             ssh_options=self.probe.ssh_options,
@@ -456,6 +496,14 @@ class Application:
             keep=keep,
         )
         load_settings(data)
+        if data["backup_napback_config"] or data["backup_truenas_config"]:
+            from .settings_backup import key_bytes
+
+            if not self.key_path().is_file() or payload.get("key_confirmed") is not True:
+                raise core.BackupError(
+                    "Lade den Wiederherstellungsschlüssel herunter und bestätige, dass Du ihn separat aufbewahrst."
+                )
+            key_bytes(self.key_path())
         return data
 
     def review_settings(self, payload):
@@ -510,6 +558,9 @@ class Application:
             "check_interval_minutes": checked.check_interval_minutes,
             "keep": checked.keep,
             "automatic": automatic,
+            "label": checked.label,
+            "backup_napback_config": checked.backup_napback_config,
+            "backup_truenas_config": checked.backup_truenas_config,
         }
 
     def save(self, payload):
@@ -540,6 +591,8 @@ class Application:
             )
         data = copy.deepcopy(review["data"])
         target = Path(data["target"])
+        if self.profiles:
+            self.profiles.check_target(self.profile_id, target)
         if not (target / core.MARKER).exists():
             data.update(core.initialize(target, storage=data["storage"]))
         else:
@@ -600,6 +653,9 @@ class Application:
             "minutes": config.check_interval_minutes,
             "sources": config.sources,
             "automatic": timer,
+            "label": config.label,
+            "backup_napback_config": config.backup_napback_config,
+            "backup_truenas_config": config.backup_truenas_config,
             "problem": friendly_error(core.BackupError(status["last_check"]["error"]))
             if (status.get("last_check") or {}).get("error")
             else None,
@@ -668,7 +724,10 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
 
     def __init__(self, application, port=0):
+        from .profiles import Profiles
+
         self.application = application
+        self.profiles = Profiles(application)
         self.token = secrets.token_urlsafe(32)
         super().__init__(("127.0.0.1", port), Handler)
         self.origin = f"http://127.0.0.1:{self.server_port}"
@@ -708,6 +767,9 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return hmac.compare_digest(self.headers.get("X-Napback-Token", ""), self.server.token)
 
+    def application(self):
+        return self.server.profiles.get(self.headers.get("X-Napback-Profile", "default"))
+
     def do_GET(self):
         if self.path in ("/", "/app.js", "/style.css"):
             if self.headers.get("Host") != self.server.origin.removeprefix("http://"):
@@ -723,15 +785,18 @@ class Handler(BaseHTTPRequestHandler):
                 403, {"error": "Öffne die Oberfläche über das Napback-Tray oder napback ui."}
             )
         try:
+            app = self.application()
             if self.path == "/api/initial":
-                result = self.server.application.initial()
+                result = app.initial()
             elif self.path == "/api/status":
-                result = self.server.application.status()
+                result = app.status()
+            elif self.path == "/api/profiles":
+                result = self.server.profiles.listing()
             elif self.path == "/api/ping":
                 result = {"ok": True, "pid": os.getpid(), "version": __version__}
             elif self.path.startswith("/api/jobs/"):
-                with self.server.application.lock:
-                    result = self.server.application.jobs.get(self.path.rsplit("/", 1)[1])
+                with app.lock:
+                    result = app.jobs.get(self.path.rsplit("/", 1)[1])
                 if result is None:
                     return self.response(404, {"error": "Vorgang nicht gefunden."})
             else:
@@ -754,7 +819,18 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(self.rfile.read(length))
             if not isinstance(payload, dict):
                 raise ValueError("Ungültige Anfrage.")
-            app = self.server.application
+            app = self.application()
+            if self.path == "/api/profiles":
+                return self.response(
+                    200,
+                    self.server.profiles.create(app.profile_id if payload.get("copy") else None),
+                )
+            if self.path == "/api/recovery-key":
+                from .settings_backup import ensure_key
+
+                with self.server.profiles.lock:
+                    key = ensure_key(app.key_path())
+                return self.response(200, key + b"\n", "application/octet-stream")
             if self.path == "/api/folders":
                 return self.response(200, folders(payload.get("path")))
             functions = {
@@ -767,7 +843,14 @@ class Handler(BaseHTTPRequestHandler):
             if self.path not in functions:
                 return self.response(404, {"error": "Nicht gefunden."})
             function = functions[self.path]
-            self.response(202, app.job(lambda: function(payload)))
+
+            def execute():
+                if self.path == "/api/save":
+                    with self.server.profiles.lock:
+                        return function(payload)
+                return function(payload)
+
+            self.response(202, app.job(execute))
         except Exception as error:
             self.response(400, friendly_error(error))
 

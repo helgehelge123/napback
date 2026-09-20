@@ -94,3 +94,27 @@ def test_tray_setup_opens_browser_without_terminal(application, tmp_path):
         assert start.call_args.args[1] == ["-m", "napback", "--config", str(path), "ui"]
     finally:
         tray.tray.hide()
+
+
+def test_tray_reports_failure_in_secondary_profile(application, configured):
+    from napback.profiles import Profiles
+    from napback.webapp import Application
+
+    profiles = Profiles(Application(configured))
+    second = profiles.get(profiles.create("default")["profile"])
+    data = core.initialize(configured.parent / "second-repo")
+    data["sources"] = core.Config.load(configured).sources
+    second.config_path.parent.mkdir()
+    core.write_json(second.config_path, data)
+    core.write_json(
+        core.Config.load(second.config_path).target / "last-check.json",
+        {"status": "failed", "error": "offline"},
+    )
+    tray = TrayController(configured, start_timer=False)
+    try:
+        assert tray.state == "failed" and tray.multiple_profiles
+        with patch.object(tray, "open_config") as opened:
+            tray.check_now()
+            opened.assert_called_once()
+    finally:
+        tray.tray.hide()

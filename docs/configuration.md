@@ -2,8 +2,10 @@
 
 Default file: `~/.config/napback/config.json`, or `$XDG_CONFIG_HOME/napback/config.json`.
 Use `napback --config /absolute/path/config.json COMMAND` for another job.
-The installer creates one timer for one configuration; multiple independent jobs
-can use separately named units generated from the supplied unit structure.
+The browser supports multiple jobs using **Neuer Auftrag** / **Auftrag kopieren**.
+Additional configurations live beside the primary file in `config.profiles/<id>.json`,
+with independent timers derived from each absolute config path. Existing default
+configurations remain in place. Draft copies are not activated until reviewed and saved.
 
 ## Browser setup
 
@@ -79,6 +81,10 @@ that actually contains the target. Repository paths must not contain symlinks.
 
 | Key | Default | Meaning |
 | --- | --- | --- |
+| `label` | `"Mein Backup"` | Display name, 1–100 characters |
+| `backup_napback_config` | `false` | Include an encrypted export of this job |
+| `backup_truenas_config` | `false` | Include the official TrueNAS configuration export with secret seed |
+| `config_key_file` | unset | Absolute local Fernet recovery-key path, outside backup targets; mode 600 |
 | `target` | required | Absolute local repository path |
 | `repository_id` | required | UUID returned by `init` |
 | `mountpoint` | required | Expected filesystem mountpoint returned by `init` |
@@ -186,3 +192,12 @@ user service so quitting the tray does not terminate a backup. Reinstalling or
 quitting the tray never stops the backup worker. Use `napback install-tray` to
 register the tray, or `napback --config /path/job.json install-tray` for a custom
 configuration (one installed tray entry per desktop user).
+
+## Settings exports
+
+See [multiple jobs and recovery](multiple-backups.md). Settings exports are stored
+under `data/.napback-settings/` inside each completed snapshot, included in its
+inventory and retention. They are always encrypted, regardless of dataset storage
+mode. A settings-enabled snapshot job refreshes at least every 24 hours when
+checks can complete, even with unchanged dataset GUIDs. Failed exports prevent
+publication; they do not silently produce a partial successful backup.
