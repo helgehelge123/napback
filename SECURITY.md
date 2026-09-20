@@ -1,0 +1,39 @@
+# Security model
+
+The local user and configuration are trusted. Do not load a configuration from
+an untrusted source: SSH options can intentionally select a ProxyCommand, and
+NAS configuration can authorize Docker/sudo access. Napback never executes a
+local shell for transfer commands. Remote arguments are shell-quoted.
+
+SSH uses verified host keys and batch mode. Private keys stay in SSH's normal
+storage. Do not put passwords or tokens in configuration files. The repository
+is private to the user (0700); extended attributes can contain source ownership
+and access-control metadata.
+
+Docker mounts the selected source read-only, disables networking, drops all
+capabilities except DAC_READ_SEARCH (needed to read root-owned source files),
+and enables no-new-privileges. No host Docker socket or device is mounted inside
+the container. The SSH account still has whatever privileges its NAS account
+has; Docker access itself is root-equivalent. For least privilege, use a dedicated
+SSH account that can only read the selected files/snapshots, with direct rsync and
+`sudo: false`. An account confined to a forced rsync command alone cannot run the
+ZFS discovery commands; a tailored allowlisted gateway would also be required.
+
+Host and container rsync must be kept updated. Paths and rsync output are handled
+as untrusted filenames, but this project does not claim to safely consume a
+malicious or compromised rsync server. Source symlinks are not followed.
+
+Repository markers and expected mountpoints prevent ordinary wrong-disk and
+unmounted-disk mistakes. They are not cryptographic device authentication. A
+malicious local user with write access can alter the inventory and its manifest
+or every hard-linked copy. SHA-256 inventories detect accidental corruption;
+they are not authenticated signatures or ransomware protection.
+
+The program deletes only its own marked incomplete attempts and validated old
+snapshots. Retention is disabled with `keep: 0`. Never use the repository as a
+working directory, mix unrelated files into its internal directories, or run
+other writers against it while Napback is active.
+
+Report suspected vulnerabilities privately through the repository owner's
+available contact channel. Do not publish credentials or personal backup paths
+in public issues.

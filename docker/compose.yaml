@@ -1,0 +1,12 @@
+# Build once on the NAS: docker compose -f docker/compose.yaml build
+# The client creates isolated, short-lived source containers over SSH.
+services:
+  source:
+    image: napback-source:0.1.0
+    build:
+      context: .
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [DAC_READ_SEARCH]
+    security_opt: [no-new-privileges:true]

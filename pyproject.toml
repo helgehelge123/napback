@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "napback"
+version = "0.1.0"
+description = "Pull versioned NAS backups when your Linux PC is awake"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{name = "Helge"}]
+classifiers = ["Operating System :: POSIX :: Linux", "Topic :: System :: Archiving :: Backup"]
+
+[project.scripts]
+napback = "napback.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["napback*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
