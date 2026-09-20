@@ -276,6 +276,7 @@
                 <h3>Einstellungen mitsichern</h3>
                 <label class="check"><input id="backup-napback" type="checkbox" /><span>Diesen Napback-Auftrag mitsichern<small>Auswahl, Zielordner und Zeitplan. Keine privaten SSH-Schlüssel.</small></span></label>
                 <label class="check"><input id="backup-truenas" type="checkbox" /><span>TrueNAS-Systemkonfiguration mitsichern<small>NAS-Einstellungen inklusive der Wiederherstellungsdaten für gespeicherte Passwörter. Kein Ersatz für Dataset-Daten oder separat gesicherte ZFS-Schlüssel.</small></span></label>
+                <label class="check"><input id="backup-apps" type="checkbox" /><span>App-Einrichtung mitsichern<small>TrueNAS-App-Einstellungen, Versionen, Container-Konfigurationen und zusätzliche Compose-Dateien. Immer verschlüsselt. Dokumente und Datenbanken brauchen weiterhin ihre Dataset-Sicherung.</small></span></label>
                 <div id="config-key-options" class="info" hidden>
                   <p>Diese Einstellungen werden immer zusätzlich verschlüsselt, auch wenn Deine Dateien lesbar bleiben. Sie werden bei jeder Sicherung und spätestens alle 24 Stunden erneuert, solange der PC läuft und das NAS erreichbar ist.</p>
                   <p>Der folgende Schlüssel öffnet nur die Konfigurationskopien. Bewahre eine Kopie getrennt vom PC auf, beispielsweise auf einem sicheren USB-Stick. Ohne diesen Schlüssel sind die Konfigurationskopien nach einem PC-Ausfall nicht lesbar.</p>

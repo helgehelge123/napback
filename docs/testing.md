@@ -1,5 +1,26 @@
 # Validation record
 
+## App configuration exports (0.6)
+
+**154 tests passed** locally, including five real Chromium tests; the optional
+ntfs3 integration test was skipped for this app-configuration change. The
+previous real ntfs3 validation remains recorded below.
+
+The app exporter is tested for complete TrueNAS version directories, external
+Compose files, environment/secret references, immutable image identifiers,
+encryption and explicit decryption. Tests reject changed deployments, changed
+files, missing required secrets, symlinks, unsafe archive paths and duplicate
+members. Docker's nondeterministic mount-array order is normalized without
+ignoring real mount changes. App-only exports also exercise daily refresh and
+failure preservation of previous completed backups. Chromium tests cover the
+separate checkbox, recovery-key confirmation, saved settings and dashboard.
+
+A read-only export against TrueNAS 25.10.7 included 8,218 managed app-definition
+files, two external Compose projects and Docker metadata. All 8,231 archive
+entries passed the independent SHA-256 inventory validation and authenticated
+encryption/decryption roundtrip. No application was restarted or reconfigured.
+This validates configuration recovery, not automatic redeployment of every app.
+
 ## Version 0.5.1: ntfs3 metadata verification
 
 **141 tests passed** locally with the real ntfs3 regression enabled. In environments

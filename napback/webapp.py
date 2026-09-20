@@ -366,6 +366,7 @@ class Application:
             "label": "Mein Backup",
             "backup_napback_config": False,
             "backup_truenas_config": False,
+            "backup_truenas_apps": False,
         }
         defaults_file = self.config_path.with_name("ui-defaults.json")
         if defaults_file.exists():
@@ -486,6 +487,7 @@ class Application:
             label=str(payload.get("label", "Mein Backup")).strip(),
             backup_napback_config=payload.get("backup_napback_config", False),
             backup_truenas_config=payload.get("backup_truenas_config", False),
+            backup_truenas_apps=payload.get("backup_truenas_apps", False),
             config_key_file=str(self.key_path()),
             host=self.probe.host,
             sudo=self.probe.sudo,
@@ -498,7 +500,10 @@ class Application:
             keep=keep,
         )
         load_settings(data)
-        if data["backup_napback_config"] or data["backup_truenas_config"]:
+        if any(
+            data[key]
+            for key in ("backup_napback_config", "backup_truenas_config", "backup_truenas_apps")
+        ):
             from .settings_backup import key_bytes
 
             if not self.key_path().is_file() or payload.get("key_confirmed") is not True:
@@ -563,6 +568,7 @@ class Application:
             "label": checked.label,
             "backup_napback_config": checked.backup_napback_config,
             "backup_truenas_config": checked.backup_truenas_config,
+            "backup_truenas_apps": checked.backup_truenas_apps,
         }
 
     def save(self, payload):
@@ -658,6 +664,7 @@ class Application:
             "label": config.label,
             "backup_napback_config": config.backup_napback_config,
             "backup_truenas_config": config.backup_truenas_config,
+            "backup_truenas_apps": config.backup_truenas_apps,
             "problem": friendly_error(core.BackupError(status["last_check"]["error"]))
             if (status.get("last_check") or {}).get("error")
             else None,

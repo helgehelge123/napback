@@ -107,6 +107,7 @@ class Profiles:
                     selected_sources=[],
                     backup_napback_config=False,
                     backup_truenas_config=False,
+                    backup_truenas_apps=False,
                 )
             self.apps[ident] = app
             return {"profile": ident}

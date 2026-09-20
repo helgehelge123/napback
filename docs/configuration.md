@@ -84,6 +84,7 @@ that actually contains the target. Repository paths must not contain symlinks.
 | `label` | `"Mein Backup"` | Display name, 1–100 characters |
 | `backup_napback_config` | `false` | Include an encrypted export of this job |
 | `backup_truenas_config` | `false` | Include the official TrueNAS configuration export with secret seed |
+| `backup_truenas_apps` | `false` | Include encrypted TrueNAS app definitions, versions, Docker metadata and external Compose configuration; requires SSH and administrative Docker access |
 | `config_key_file` | unset | Absolute local Fernet recovery-key path, outside backup targets; mode 600 |
 | `target` | required | Absolute local repository path |
 | `repository_id` | required | UUID returned by `init` |

@@ -160,8 +160,7 @@ def test_browser_config_backup_requires_key_and_saved_confirmation(browser_page,
     page.locator("#to-storage").click()
     page.locator("#target").fill(str(tmp_path / "with-settings"))
     page.locator("#automatic").uncheck()
-    page.locator("#backup-napback").check()
-    page.locator("#backup-truenas").check()
+    page.locator("#backup-apps").check()
     page.locator("#review-button").click()
     page.locator("#error-text").get_by_text(
         "Lade den Wiederherstellungsschlüssel", exact=False
@@ -172,15 +171,23 @@ def test_browser_config_backup_requires_key_and_saved_confirmation(browser_page,
     downloaded.value.save_as(tmp_path / "download.key")
     assert (tmp_path / "download.key").read_bytes().strip() == app.key_path().read_bytes().strip()
     page.locator("#key-confirmed").check()
+    page.locator("#backup-napback").check()
+    page.locator("#backup-truenas").check()
     page.locator("#review-button").click()
     page.locator("#step-3").wait_for(state="visible")
     page.locator("#review-content").get_by_text(
-        "Napback-Auftrag und TrueNAS-Systemkonfiguration", exact=True
+        "Napback-Auftrag und TrueNAS-Systemkonfiguration und App-Einrichtung", exact=True
     ).wait_for()
     with patch("napback.webapp.subprocess.run"):
         page.locator("#save-button").click()
         page.locator("#dashboard-content h2").get_by_text("Deine gespeicherte Auswahl").wait_for()
     config = core.Config.load(app.config_path)
     assert config.backup_truenas_config and config.backup_napback_config
+    assert config.backup_truenas_apps
     assert config.config_key_file == str(app.key_path())
+    page.reload()
+    page.locator("#dashboard-content").get_by_text(
+        "Zusätzlich verschlüsselt:", exact=False
+    ).wait_for()
+    assert "App-Einrichtung" in page.locator("#dashboard-content").inner_text()
     assert not errors

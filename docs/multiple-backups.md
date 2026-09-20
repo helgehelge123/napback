@@ -35,7 +35,7 @@ für Prüfung, Einstellungen oder einen manuellen Lauf.
 
 ## Einstellungen mitsichern
 
-In Schritt **Auf dem PC speichern** gibt es zwei unabhängige Haken:
+In Schritt **Auf dem PC speichern** gibt es drei unabhängige Haken:
 
 - **Diesen Napback-Auftrag mitsichern:** die Konfigurationsdatei dieses Auftrags,
   also NAS-Zugangsdaten als Adresse und Schlüsselpfad, Datenauswahl, Ziel und
@@ -44,8 +44,15 @@ In Schritt **Auf dem PC speichern** gibt es zwei unabhängige Haken:
   Datenbank, Passwort-Secret-Seed und vorhandenen Administrator-SSH-Zugangslisten.
   Das kann Zugangsdaten enthalten. Es ersetzt weder Dataset-Backups noch separat
   gesicherte ZFS-Schlüssel und Passphrasen oder eine bootfähige Installation.
+- **App-Einrichtung mitsichern:** TrueNAS-App-Einstellungen und vorhandene
+  Versionsverzeichnisse, Container-Einstellungen, Image-Versionen und Digests,
+  Netzwerk- und Volume-Beschreibungen. Bei zusätzlichen Compose-Projekten werden
+  die zugeordneten Compose-Dateien, vorhandene `.env`-Dateien, referenzierte
+  Umgebungs-/Secret-/Konfigurationsdateien und die aufgelöste Compose-Konfiguration
+  mitgesichert. Voraussetzung sind TrueNAS mit Docker-Apps und Docker Compose
+  mit `config --no-env-resolution`. Enthaltene Zugangsdaten bleiben verschlüsselt.
 
-Beide Konfigurationskopien sind immer zusätzlich verschlüsselt, auch in Aufträgen
+Alle Konfigurationskopien sind immer zusätzlich verschlüsselt, auch in Aufträgen
 mit lesbaren Dateien. Dafür nutzt Napback die etablierte Fernet-Verschlüsselung
 von `cryptography`. Der Installer installiert die Python-Abhängigkeit mit.
 Die ZFS-Datenarchive behalten weiterhin ihre ursprüngliche ZFS-Verschlüsselung.
@@ -82,6 +89,7 @@ Mit vollständigen Pfaden ausführen:
 ```sh
 napback decrypt-config /BACKUP/data/.napback-settings/truenas-config.tar.fernet /SICHERER-ORDNER/truenas-config.tar --key /USB/napback-recovery.key
 napback decrypt-config /BACKUP/data/.napback-settings/napback-config.json.fernet /SICHERER-ORDNER/napback-config.json --key /USB/napback-recovery.key
+napback decrypt-config /BACKUP/data/.napback-settings/truenas-apps.tar.fernet /SICHERER-ORDNER/truenas-apps.tar --key /USB/napback-recovery.key
 ```
 
 Napback schreibt nur eine neue Datei mit Dateirechten 600 und überschreibt nichts.
@@ -98,6 +106,46 @@ Die Napback-Datei enthält genau einen Auftrag. Prüfe besonders Zielordner,
 Repository-ID und SSH-Schlüsselpfad, bevor Du ihn auf einem neuen PC übernimmst.
 Timer musst Du anschließend erneut einrichten. Ein exportierter Schlüsselpfad
 ersetzt nicht die dazugehörige private SSH-Schlüsseldatei.
+
+## App-Einrichtung zurückholen
+
+Das entschlüsselte App-Archiv ist ein gzip-komprimiertes Tar-Archiv. Lege einen
+neuen privaten Ordner an und entpacke es dort, niemals direkt über die laufende
+TrueNAS-Installation:
+
+```sh
+mkdir -m 700 /SICHERER-ORDNER/apps-zurueckgeholt
+tar -xzf /SICHERER-ORDNER/truenas-apps.tar -C /SICHERER-ORDNER/apps-zurueckgeholt
+```
+
+Unter `files/mnt/.ix-apps/app_configs` liegen die TrueNAS-App-Einstellungen,
+Versionsverzeichnisse und erzeugten Compose-Dateien. `docker/` enthält die
+Container-, Image-, Netzwerk- und Volume-Beschreibungen. `compose/projects.json`
+ordnet zusätzliche Compose-Projekte ihren Originalpfaden und aufgelösten
+Konfigurationen zu. `manifest.json` enthält die SHA-256-Prüfsummen sämtlicher
+Dateien; Napback prüft sie vor dem verschlüsselten Speichern.
+
+Auf einem Ersatz-NAS zuerst die Dataset-Daten und dann die Apps mit passenden
+Versionen, Pfaden, Benutzern und gespeicherten Einstellungen wieder einrichten.
+Das Archiv unterstützt diese Rekonstruktion; Napback spielt es nicht automatisch
+in TrueNAS ein und startet daraus keine Container. Vorhandene Volume-Inhalte,
+Container-Images, Quellcode für eigene Builds und Dateien aus Bind-Mounts sind
+keine Bestandteile dieses Konfigurationsarchivs. Sie benötigen weiterhin passende
+Datenbackups beziehungsweise verfügbare Images. Docker-Beschreibungen für
+Container ohne Compose-Datei dienen der manuellen Rekonstruktion.
+
+Die App-Einrichtung wird zum Zeitpunkt des Exports gelesen. Dieser Zeitpunkt
+steht in `system.json` und kann neuer als der gesicherte Dataset-Snapshot sein.
+Vor einem Restore deshalb die App- und Datenbankversion mit dem gewünschten
+Datenstand abgleichen; ältere vorhandene App-Versionsverzeichnisse werden erhalten.
+Ändern sich beobachtete Konfigurationsdateien, Container-Definitionen oder
+aufgelöste Compose-Einstellungen während des Exports, bricht die Sicherung ab.
+Fehlende erforderliche Dateien werden nicht stillschweigend übersprungen.
+
+Die App-Sicherung liest `ix-apps` nur. Sie verändert weder das Dataset noch
+laufende Apps. Ein verschlüsselter Dataset-Auftrag kann diese separat
+verschlüsselte Konfigurationskopie aufnehmen, obwohl `ix-apps` selbst
+unverschlüsselt ist.
 
 Technische Grundlage: [TrueNAS config.save](https://api.truenas.com/v25.10/api_methods_config.save.html),
 [TrueNAS core.download](https://api.truenas.com/v25.10/api_methods_core.download.html),

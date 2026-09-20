@@ -1,5 +1,13 @@
 # Security model
 
+Optional app-configuration exports contain application credentials and resolved
+Compose environment values. They are transferred through authenticated SSH and
+held only in memory until Fernet encryption. Public source code and examples do
+not contain exported configurations. Archives contain regular files only, with
+size limits and an independently checked SHA-256 inventory. Source changes during
+capture abort the export; command errors never echo configuration output.
+Decryption explicitly writes a new private file and does not deploy applications.
+
 The local user and configuration are trusted. Do not load a configuration from
 an untrusted source: SSH options can intentionally select a ProxyCommand, and
 NAS configuration can authorize Docker/sudo access. Napback never executes a

@@ -9,6 +9,11 @@ gesichert. Unveränderte Snapshots erzeugen keine weitere lokale Version.
 Für mehrere Kopien, verschiedene Speicherarten und die optionale TrueNAS-
 Konfigurationssicherung siehe [Mehrere Aufträge und Einstellungen](multiple-backups.md).
 
+Für einen späteren Neuaufbau zusätzlich **App-Einrichtung mitsichern** aktivieren.
+Das sichert App-Einstellungen, vorhandene Versionen und Compose-Dateien immer
+verschlüsselt. Die TrueNAS-Systemkonfiguration allein enthält diese Einrichtung
+nicht. Dokumente und Datenbanken bleiben Teil Deiner ausgewählten Datasets.
+
 ## Installieren
 
 Quellarchiv von den [GitHub-Releases](https://github.com/helgehelge123/napback/releases)

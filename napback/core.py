@@ -150,6 +150,7 @@ class Config:
     label: str = "Mein Backup"
     backup_napback_config: bool = False
     backup_truenas_config: bool = False
+    backup_truenas_apps: bool = False
     config_key_file: str | None = None
 
     @classmethod
@@ -168,12 +169,12 @@ class Config:
         config.mountpoint = absolute(config.mountpoint, "mountpoint")
         if not isinstance(config.label, str) or not config.label.strip() or len(config.label) > 100:
             raise BackupError("label must contain 1 to 100 characters")
-        for field in ("backup_napback_config", "backup_truenas_config"):
+        for field in ("backup_napback_config", "backup_truenas_config", "backup_truenas_apps"):
             if not isinstance(getattr(config, field), bool):
                 raise BackupError(f"{field} must be a boolean")
-        if config.backup_truenas_config and not config.host:
+        if (config.backup_truenas_config or config.backup_truenas_apps) and not config.host:
             raise BackupError("TrueNAS configuration backup requires SSH")
-        if config.backup_napback_config or config.backup_truenas_config:
+        if config.settings_enabled():
             key_path = absolute(config.config_key_file, "config_key_file")
             if key_path == config.target or config.target in key_path.parents:
                 raise BackupError("Keep the configuration recovery key outside the backup target")
@@ -322,12 +323,17 @@ class Config:
             "label",
         ):
             data.pop(key)
-        if not self.backup_napback_config and not self.backup_truenas_config:
+        if not self.backup_truenas_apps:
+            data.pop("backup_truenas_apps")  # Preserve pre-0.6 fingerprints when disabled.
+        if not self.settings_enabled():
             for key in ("backup_napback_config", "backup_truenas_config", "config_key_file"):
                 data.pop(key)
         if self.storage == "files":
             data.pop("storage")  # Preserve existing directory-backup fingerprints.
         return hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+
+    def settings_enabled(self):
+        return self.backup_napback_config or self.backup_truenas_config or self.backup_truenas_apps
 
     def ssh(self):
         # Place mandatory noninteractive settings first: OpenSSH takes the first value.
@@ -790,7 +796,7 @@ def _checked_run(config, entries, check_state, force, started, now):
         return {"status": "not_due", "last_success": entries[-1][1]["completed_at"]}
     if snapshot_mode:
         sources = plan_sources(config, started)
-        settings_due = (config.backup_napback_config or config.backup_truenas_config) and (
+        settings_due = config.settings_enabled() and (
             not entries or started - entries[-1][1]["completed_at"] >= 86400
         )
         if not force and not settings_due and same_sources(config, entries, sources):
@@ -844,7 +850,7 @@ def _checked_run(config, entries, check_state, force, started, now):
                     )
         from .integrity import record
 
-        if config.backup_napback_config or config.backup_truenas_config:
+        if config.settings_enabled():
             from .settings_backup import backup_settings
 
             backup_settings(config, stage)

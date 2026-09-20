@@ -52,7 +52,8 @@ See the [German guide](docs/multiple-backups.md) for details and recovery.
 - Local browser setup with real snapshot examples, dataset checkboxes, explicit exclusions and saved configuration.
 - KDE-compatible system tray with status, check now, folder, interval, setup and logs.
 - Multiple named jobs, independent copies and separate encrypted/plaintext destinations.
-- Optional encrypted Napback and TrueNAS configuration exports with a downloadable recovery key.
+- Optional encrypted Napback, TrueNAS system and app-configuration exports with a downloadable recovery key.
+- App definitions, available versions, Docker deployment metadata and external Compose settings for recovery.
 - Python engine, `cryptography` for settings exports and optional PyQt6 tray. MIT licensed, no cloud account.
 
 ## Requirements

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -9,7 +10,7 @@ import stat
 import subprocess
 import tarfile
 from dataclasses import asdict
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -108,6 +109,81 @@ def export_truenas(config):
     return data
 
 
+def validate_apps_export(data):
+    """Check every archived file without extracting sensitive configuration."""
+    from .app_export import MAX_CONTENT, MAX_FILES
+
+    actual, manifest, total = {}, None, 0
+    if not data or len(data) > MAX_EXPORT:
+        raise ValueError("Invalid app archive size")
+    with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+        for member in archive:
+            path = PurePosixPath(member.name)
+            total += member.size
+            if (
+                not member.isfile()
+                or path.is_absolute()
+                or ".." in path.parts
+                or str(path) != member.name
+                or member.name in actual
+                or member.size > MAX_EXPORT
+                or total > MAX_CONTENT + MAX_EXPORT
+                or len(actual) > MAX_FILES
+            ):
+                raise ValueError("Unsafe or oversized app archive")
+            stream = archive.extractfile(member)
+            if member.name == "manifest.json":
+                if manifest is not None:
+                    raise ValueError("Duplicate app manifest")
+                manifest = json.load(stream)
+            else:
+                digest = hashlib.sha256()
+                for block in iter(lambda: stream.read(1024 * 1024), b""):
+                    digest.update(block)
+                actual[member.name] = {
+                    "path": member.name,
+                    "size": member.size,
+                    "sha256": digest.hexdigest(),
+                }
+    required = {
+        "docker/containers.json",
+        "docker/images.json",
+        "docker/networks.json",
+        "docker/volumes.json",
+        "compose/projects.json",
+        "system.json",
+    }
+    if not manifest or manifest.get("format") != 1 or not required <= set(actual):
+        raise ValueError("Incomplete app archive")
+    expected = manifest.get("files")
+    if not isinstance(expected, list) or len(expected) != len(actual):
+        raise ValueError("Invalid app inventory")
+    if len({e["path"] for e in expected}) != len(expected) or any(
+        actual.get(e["path"]) != e for e in expected
+    ):
+        raise ValueError("App inventory checksum mismatch")
+    return manifest
+
+
+def export_truenas_apps(config):
+    script = Path(__file__).with_name("app_export.py").read_text()
+    result = subprocess.run(
+        config.remote_argv(["python3", "-"]),
+        input=script.encode(),
+        capture_output=True,
+        timeout=600,
+    )
+    try:
+        if result.returncode:
+            raise ValueError("Remote export failed")
+        validate_apps_export(result.stdout)
+    except Exception as error:
+        raise core.BackupError(
+            "App-Einrichtung konnte nicht vollständig gesichert werden. Prüfe NAS-Zugang, Docker Compose und ob gerade ein App-Update läuft."
+        ) from error
+    return result.stdout
+
+
 def backup_settings(config, stage):
     cipher = Fernet(key_bytes(config.config_key_file))
     directory = stage / "data" / DIRECTORY
@@ -119,6 +195,8 @@ def backup_settings(config, stage):
         exports["napback-config.json.fernet"] = json.dumps(data, indent=2).encode()
     if config.backup_truenas_config:
         exports["truenas-config.tar.fernet"] = export_truenas(config)
+    if config.backup_truenas_apps:
+        exports["truenas-apps.tar.fernet"] = export_truenas_apps(config)
     for name, cleartext in exports.items():
         encrypted = cipher.encrypt(cleartext)
         if cipher.decrypt(encrypted) != cleartext:

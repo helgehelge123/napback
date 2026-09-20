@@ -83,6 +83,17 @@ then the desired sources. **Do not run `init` over the repository.** Its
 `manifest.json` files also record the selected source datasets and snapshot names.
 Private SSH keys are intentionally not copied into backups by Napback itself.
 
+## Application deployment settings
+
+Enable **App-Einrichtung mitsichern** to save encrypted TrueNAS app definitions,
+available version directories, Docker deployment metadata and referenced external
+Compose configuration alongside a backup. A TrueNAS system configuration export
+alone does not include those app definitions. See the
+[configuration recovery instructions](multiple-backups.md#app-einrichtung-zurückholen).
+The export is read-only and never redeploys apps automatically. Dataset contents,
+image availability, encryption keys and matching application/database versions
+remain necessary for recovery.
+
 ## Corruption
 
 Stop automatic backups while investigating a reported integrity mismatch:
