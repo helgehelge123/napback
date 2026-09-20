@@ -184,3 +184,11 @@ explizit `"trigger": "interval"` setzen. Normale Verzeichnisquellen behalten
 automatisch den Intervallmodus.
 
 Prüfdetails und Grenzen der Tests stehen im [Testbericht](testing.md).
+
+### NTFS-Ziele unter Linux
+
+Ab Version 0.5.1 berücksichtigt Napback die zusätzlichen Verwaltungsattribute
+des Linux-Treibers `ntfs3`. Dateiinhalte, normale Zusatzattribute und gespeicherte
+Zugriffsregeln werden weiterhin geprüft. Eine echte Sicherung mit Rückkopie wurde
+auf `ntfs3` getestet. FAT/exFAT bleiben wegen fehlender Hardlinks und Zusatzattribute
+ungeeignet. Andere NTFS-Treiber wurden nicht damit getestet.

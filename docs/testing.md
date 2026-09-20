@@ -1,5 +1,27 @@
 # Validation record
 
+## Version 0.5.1: ntfs3 metadata verification
+
+**140 tests passed** locally with the real ntfs3 regression enabled. In environments
+without an explicit ntfs3 test mount, that one integration test is skipped.
+
+The ntfs3 driver exposes `$LXUID`, `$LXGID`, `$LXMOD` and `$LXDEV` as filesystem
+bookkeeping attributes. A normal rsync fake-super comparison attempted to
+reconcile these destination-only attributes, producing repeated `x` changes and
+also losing a root directory's saved default ACL. The failure was reproduced on
+a real existing ntfs3 filesystem with a small synthetic source.
+
+Receiver-only xattr filters now protect exactly those four bookkeeping names.
+Source xattr filtering is unchanged. Default and named ACLs remain stored through
+fake-super; file checksums and ordinary user xattrs remain fully checked.
+Synthetic real-NTFS tests verify the backup and restore to both a Linux filesystem
+and NTFS. Deliberately corrupted contents and user xattrs still fail verification.
+The ntfs3 regression is opt-in via `NAPBACK_TEST_NTFS_ROOT=/existing/ntfs/mount`;
+it creates a uniquely named fixture directory and never formats or mounts a disk.
+
+See the [kernel ntfs3 implementation](https://github.com/torvalds/linux/blob/master/fs/ntfs3/xattr.c)
+and [rsync xattr-filter documentation](https://github.com/RsyncProject/rsync/blob/master/rsync.1.md).
+
 ## Version 0.5: multiple jobs and configuration exports
 
 **138 tests passed** locally, including five real Chromium interaction tests.

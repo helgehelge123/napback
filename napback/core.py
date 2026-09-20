@@ -559,6 +559,14 @@ def transfer_command(config, source, destination, previous=None, verify=False):
         "--exclude=.zfs/",
         "--timeout=" + str(int(config.io_timeout_seconds)),
         "--protect-args",
+        # ntfs3 maintains these WSL bookkeeping attributes from chmod/chown.
+        # Removing them during xattr reconciliation causes persistent changes
+        # and can also discard the root's fake-super default ACL. Protect only
+        # these receiver attributes; source ACLs/xattrs and checksums still apply.
+        "--filter=-xr $LXUID",
+        "--filter=-xr $LXGID",
+        "--filter=-xr $LXMOD",
+        "--filter=-xr $LXDEV",
     ]
     if config.bandwidth_limit_kib:
         argv += ["--bwlimit=" + str(config.bandwidth_limit_kib)]
@@ -826,7 +834,9 @@ def _checked_run(config, entries, check_state, force, started, now):
                     timeout=config.timeout_seconds,
                 )
                 if changes.strip():
-                    raise BackupError(f"Verification failed for {source.name}: {changes[:1500]}")
+                    raise BackupError(
+                        f"Verification failed for {source.dataset or source.name}: {changes[:1500]}"
+                    )
         from .integrity import record
 
         if config.backup_napback_config or config.backup_truenas_config:

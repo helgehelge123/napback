@@ -263,6 +263,8 @@ def friendly_error(error):
         message = "Die vorhandenen Snapshots sind zu alt. Prüfe auf TrueNAS, ob der regelmäßige Snapshot-Auftrag noch läuft."
     elif "is not encrypted" in detail:
         message = "Ein gewählter Bereich ist auf dem NAS nicht verschlüsselt. Öffne die Datenauswahl und prüfe, welche Bereiche eingeschlossen sind."
+    elif "Verification failed for" in detail:
+        message = "Die Kopie stimmt bei Dateiinhalten oder Eigenschaften noch nicht mit der Quelle überein. Dieser Lauf wurde nicht als erfolgreiche Sicherung übernommen. Die technischen Details nennen die Unterschiede."
     elif "Expected target filesystem is not mounted" in detail:
         message = "Das Backup-Laufwerk ist nicht am erwarteten Ort eingebunden. Schließe es an und prüfe den Zielordner."
     elif "Another backup" in detail:
