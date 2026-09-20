@@ -529,6 +529,10 @@ class Application:
             raise core.BackupError(
                 "Die Datenbereiche haben sich geändert. Bitte prüfe die Auswahl erneut."
             )
+        if config_hash(self.config_path) != review["old_hash"]:
+            raise core.BackupError(
+                "Die Konfiguration wurde während der NAS-Prüfung geändert. Bitte lade die Seite neu."
+            )
         data = copy.deepcopy(review["data"])
         target = Path(data["target"])
         if not (target / core.MARKER).exists():
@@ -536,6 +540,10 @@ class Application:
         else:
             core.check_repository(checked)
         self.config_path.parent.mkdir(parents=True, exist_ok=True)
+        if config_hash(self.config_path) != review["old_hash"]:
+            raise core.BackupError(
+                "Die Konfiguration wurde inzwischen geändert. Bitte lade die Seite neu."
+            )
         backup_existing(self.config_path)
         core.write_json(self.config_path, data)
         self.review = None

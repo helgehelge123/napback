@@ -2,7 +2,7 @@
 
 ## Version 0.4: local browser interface
 
-On CachyOS, **121 tests passed**, including all three Chromium browser tests.
+On CachyOS, **122 tests passed**, including all three Chromium browser tests.
 
 The new interface was tested with synthetic NAS metadata and real Chromium:
 dataset selection, actual snapshot names, missing-snapshot errors, explicit

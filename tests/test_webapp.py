@@ -105,6 +105,22 @@ def test_config_edit_since_review_is_not_overwritten(app):
     assert app.config_path.read_text() == "concurrent user edit"
 
 
+def test_config_edit_during_remote_recheck_is_not_overwritten(app):
+    review = app.review_settings(settings(app))
+    plan = core.plan_sources
+
+    def changed_during_recheck(*args):
+        result = plan(*args)
+        app.config_path.write_text("edit during SSH check")
+        return result
+
+    with patch.object(core, "plan_sources", changed_during_recheck):
+        with pytest.raises(core.BackupError, match="während der NAS-Prüfung"):
+            app.save({"review_id": review["review_id"]})
+    assert app.config_path.read_text() == "edit during SSH check"
+    assert not (app.config_path.parent / "backup").exists()
+
+
 def test_config_edits_create_backup_and_preserve_repository_identity(app):
     draft = settings(app)
     with patch("napback.webapp.subprocess.run"):
