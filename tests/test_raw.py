@@ -278,7 +278,7 @@ def test_raw_cli_verifies_and_rejects_ordinary_file_restore(raw_job, tmp_path):
 def test_setup_defaults_to_native_encryption(tmp_path, monkeypatch):
     target = tmp_path / "backup"
     path = tmp_path / "config.json"
-    answers = iter(["nas", "y", "tank/secret", str(target), "", "1", "n"])
+    answers = iter(["nas", "", "y", "tank/secret", "", str(target), "", "1", "n"])
     monkeypatch.setattr("builtins.input", lambda _: next(answers))
     with (
         patch.object(core.Config, "remote", return_value=""),

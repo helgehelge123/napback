@@ -5,6 +5,22 @@ Use `napback --config /absolute/path/config.json COMMAND` for another job.
 The installer creates one timer for one configuration; multiple independent jobs
 can use separately named units generated from the supplied unit structure.
 
+## Guided setup
+
+Run `napback setup` for German guidance or `napback setup --language en` for
+English. Each field explains its meaning and the relevant TrueNAS settings;
+`?` repeats that field's help. The wizard accepts `user@NAS-address` or an SSH
+alias, with an optional separate private-key path. An explicit key path becomes
+`ssh_options: ["-i", "/absolute/path/to/key", "-oIdentitiesOnly=yes"]`; the key
+contents are never copied into the configuration. Leaving it blank preserves
+normal SSH key/alias discovery.
+
+The snapshot-prefix field accepts `*` for all names (saved as `""`). Other
+prefixes are literal name beginnings, not naming templates or regular
+expressions. The wizard validates access and snapshot availability before
+creating a repository or replacing the configuration. Existing configurations
+are backed up beside the original.
+
 ## Manual setup
 
 ```sh

@@ -3,15 +3,12 @@
 import argparse
 import json
 import os
-import re
 import shlex
 import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import time
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -92,71 +89,10 @@ def install_timer(config_path):
     }
 
 
-def setup(config_path):
-    """Interactive setup keeps credentials in SSH, never in application config."""
-    print("Napback — pull ZFS snapshots when this PC is awake.")
-    host = input("SSH host (existing alias or user@nas): ").strip()
-    use_sudo = input("Use sudo -n on the NAS? [Y/n]: ").strip().lower() != "n"
-    probe = core.Config(Path("/"), str(uuid.uuid4()), Path("/"), [], host=host, sudo=use_sudo)
-    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.@-]*", host):
-        raise core.BackupError("Invalid SSH host")
-    print(
-        probe.remote(
-            ["zfs", "list", "-H", "-o", "name,used,encryption,mountpoint", "-t", "filesystem"]
-        )
-    )
-    names = input("Datasets to back up, separated by commas (children included): ").split(",")
-    sources = [
-        {"name": f"dataset-{i + 1}", "dataset": name.strip(), "recursive": True}
-        for i, name in enumerate(names)
-        if name.strip()
-    ]
-    target = input("New or empty destination directory on this PC: ").strip()
-    storage = (
-        input(
-            "Storage [zfs_raw = preserve ZFS encryption; files = readable files] [zfs_raw]: "
-        ).strip()
-        or "zfs_raw"
-    )
-    image = ""
-    if storage == "files":
-        image = input(
-            "NAS Docker image [empty = installed rsync; e.g. napback-source:0.1.0]: "
-        ).strip()
-    config = {
-        "target": target,
-        "repository_id": str(uuid.uuid4()),
-        "mountpoint": "/",
-        "host": host,
-        "sudo": use_sudo,
-        "sources": sources,
-        "storage": storage,
-    }
-    interval = input("Check for new snapshots every how many minutes? [1]: ").strip()
-    config["check_interval_minutes"] = int(interval or "1")
-    config["trigger"] = "new_snapshot"
-    if storage == "zfs_raw":
-        print(
-            "Preserves native ZFS encryption without local keys or ZFS. All selected datasets must be encrypted. Restore requires ZFS and your original keys; keep those separately."
-        )
-    else:
-        print("FILES MODE IS NOT ENCRYPTED. ZFS encryption is not inherited in this mode.")
-    if image:
-        config["docker_image"] = image
-    # Validate and plan before creating the repository or replacing existing config.
-    with tempfile.TemporaryDirectory() as temporary:
-        temporary_config = Path(temporary) / "config.json"
-        core.write_json(temporary_config, config)
-        checked = core.Config.load(temporary_config)
-        core.plan_sources(checked, time.time())
-    config.update(core.initialize(target, storage=storage))
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-    backup_existing(config_path)
-    core.write_json(config_path, config)
-    print(f"Configuration: {config_path}")
-    if input("Enable the background timer? [Y/n]: ").strip().lower() != "n":
-        install_timer(config_path)
-    return {"status": "configured", "target": config["target"]}
+def setup(config_path, language="de"):
+    from .wizard import setup as guided_setup
+
+    return guided_setup(config_path, language=language)
 
 
 def main(argv=None):
@@ -166,7 +102,8 @@ def main(argv=None):
     parser.add_argument("--version", action="version", version=__version__)
     parser.add_argument("--config", type=Path, default=default_config())
     commands = parser.add_subparsers(dest="action", required=True)
-    commands.add_parser("setup", help="Interactive SSH/ZFS setup")
+    setup_parser = commands.add_parser("setup", help="Guided TrueNAS setup with inline help")
+    setup_parser.add_argument("--language", choices=("de", "en"), default="de")
     commands.add_parser("tray", help="Show background status in the desktop system tray")
     commands.add_parser(
         "install-tray", help="Install and start the desktop tray with login autostart"
@@ -221,7 +158,7 @@ def main(argv=None):
         elif args.action == "init":
             result = core.initialize(args.target, storage=args.storage)
         elif args.action == "setup":
-            result = setup(args.config)
+            result = setup(args.config, language=args.language)
         elif args.action == "install-timer":
             result = install_timer(args.config)
         else:
@@ -319,6 +256,7 @@ def main(argv=None):
         ValueError,
         subprocess.TimeoutExpired,
         KeyboardInterrupt,
+        EOFError,
     ) as error:
         print(f"napback: {error}", file=sys.stderr)
         return 1

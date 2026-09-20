@@ -93,18 +93,26 @@ backup job; the initial tray state is “Not configured”.
 
 ## Configure and run
 
-Configure an SSH alias and verify the NAS host key through a trusted channel.
-Confirm noninteractive access, then start setup:
+Start the guided setup (German by default, English available):
 
 ```sh
-ssh -oBatchMode=yes my-nas 'sudo -n zfs list'
 napback setup
+napback setup --language en  # Use this instead for English
 ```
 
-Setup asks for datasets, a new/empty destination, storage mode and polling
-interval, validates sources and offers to enable the background timer. Accept
-`zfs_raw` to preserve encryption. See [manual configuration](docs/configuration.md)
-for explicit source names and other options.
+Each question includes a TrueNAS explanation and examples; `?` repeats the help.
+“SSH host” means `user@NAS-address`, such as `backup@192.168.1.10`, or an existing
+SSH alias. A separate field accepts the private SSH key's **path on the PC**;
+the matching public key belongs in the TrueNAS user's settings. Setup explains
+SSH access, passwordless sudo, dataset names, snapshot tasks and prefixes, local
+storage, encryption and the minutes interval. Verify the NAS host key through a
+trusted channel before accepting the first SSH connection.
+
+Invalid field values can be corrected directly. Sources and existing snapshots
+are validated before saving a configuration or creating a repository. Setup
+then offers to enable the background timer. Accept `zfs_raw` to preserve
+encryption. See [TrueNAS details](docs/truenas.md) and
+[manual configuration](docs/configuration.md) for additional options.
 
 ```sh
 napback plan           # Inspect selected snapshots; no transfer

@@ -49,8 +49,32 @@ Für eine Installation ohne Tray und Qt: `./install.sh --cli-only`.
 napback setup
 ```
 
-Der Assistent fragt SSH-Zugang, Datasets, einen neuen oder leeren Zielordner und
-den Speichermodus und das Prüfintervall in Minuten ab.
+Der Assistent erklärt jeden Schritt auf Deutsch direkt vor der Eingabe. `?`
+wiederholt die Hilfe zum aktuellen Feld; Enter übernimmt die Vorgabe in eckigen
+Klammern. Falsche Eingaben kannst Du direkt korrigieren. Englisch ist mit
+`napback setup --language en` verfügbar.
+
+| Eingabe | Bedeutung und Beispiel |
+| --- | --- |
+| TrueNAS-Zugang / SSH-Host | `backup@192.168.1.10`: vor `@` der Benutzer auf TrueNAS, dahinter die NAS-Adresse. Kein `https://` und kein Ordnerpfad. Ein vorhandener SSH-Alias geht ebenfalls. |
+| SSH-Schlüsseldatei | Pfad zum privaten Schlüssel auf Deinem PC, etwa `~/.ssh/id_ed25519_nas`. Nicht den Schlüsselinhalt eingeben. Der öffentliche Schlüssel aus der passenden `.pub`-Datei gehört in TrueNAS zum Benutzer. |
+| Erhöhte Rechte / sudo | Ja, wenn Dein NAS-Benutzer ZFS-Befehle mit `sudo -n` ohne Passwortabfrage ausführen darf. |
+| Datasets | Vollständige Namen aus der angezeigten Liste, etwa `tank/dokumente,tank/fotos`. Kinder werden mitgesichert. |
+| Snapshot-Namensanfang | `auto-` passt zu `auto-2026-09-20_12-00`; bei `autosnap_...` entsprechend `autosnap_`. `*` erlaubt alle Namen. |
+| Zielordner | Neuer oder leerer Ordner auf dem PC, etwa `~/NAS-Backup` oder auf einer bereits eingebundenen Festplatte. |
+| Speichermodus | `zfs_raw` erhält die vorhandene ZFS-Verschlüsselung; `files` speichert unverschlüsselte Dateien. |
+| Minutenintervall | Standard `1`: jede Minute nach neuen Snapshots schauen. Ohne neue Generation wird nichts kopiert. |
+
+In TrueNAS findest Du den SSH-Dienst unter **System > Services > SSH**. Beim
+Benutzer unter **Credentials > Users** (je nach Version **Local Users**) den
+SSH-/Shell-Zugang und den **Public SSH Key** prüfen. Die Oberfläche unterscheidet
+sich etwas zwischen TrueNAS-Versionen. Bei Verbindungsfehlern zeigt der Assistent
+konkrete Hinweise und einen passenden SSH-Testbefehl. Den Server-Fingerabdruck vor
+der ersten Bestätigung über die NAS-Konsole prüfen.
+
+Offizielle TrueNAS-Hilfe: [SSH-Dienst](https://www.truenas.com/docs/scale/25.10/scaletutorials/systemsettings/services/sshservicescale/)
+und [Benutzereinstellungen](https://www.truenas.com/docs/scale/25.10/scaleuireference/credentials/usersscreen/).
+
 Übernimm `zfs_raw`, um die vorhandene ZFS-Verschlüsselung zu erhalten. Alle
 gewählten Datasets einschließlich ihrer Kinder müssen verschlüsselt sein.
 Unverschlüsselte Quellen werden abgewiesen; es gibt keinen stillen Klartext-Fallback. Enter übernimmt eine Minute; erlaubt sind
@@ -61,13 +85,16 @@ SSH-Einstellungen enthalten. Den Hostschlüssel vorher prüfen. SSH und ggf.
 TrueNAS muss bereits regelmäßige Snapshots anlegen, bei Kind-Datasets gemeinsam
 als rekursive Snapshots. `auto-` ist lediglich der standardmäßige Namensanfang,
 nach dem Napback sucht, beispielsweise `auto-2026-09-20_12-00`. Napback erstellt
-selbst keine NAS-Snapshots. Den Filter änderst Du mit `snapshot_prefix` in der
-Konfiguration; ein leerer Wert erlaubt jeden Namensanfang. Standardmäßig darf
+selbst keine NAS-Snapshots. Unter **Data Protection > Periodic Snapshot Tasks**
+einen passenden Auftrag prüfen oder anlegen, bei Kindern **Recursive** aktivieren.
+Vor dem Fortfahren muss bereits eine passende Generation existieren.
+Den Filter wählst Du im Assistenten oder später mit `snapshot_prefix` in der
+Konfiguration; ein leerer JSON-Wert erlaubt jeden Namensanfang. Standardmäßig darf
 die gewählte Generation höchstens 48 Stunden alt sein.
 
 Nur beim alternativen Modus `files` kann als Docker-Image `napback-source:0.1.0` verwendet werden. Es wird auf dem
 NAS mit `docker compose -f docker/compose.yaml build` erstellt. Das Sender-Image
-bleibt auch mit Napback 0.3.0 bei Version 0.1.0. Alternativ verwendet Napback das
+bleibt auch mit Napback 0.3.1 bei Version 0.1.0. Alternativ verwendet Napback das
 auf dem NAS installierte rsync. Es wird kein dauerhaft laufender Container
 benötigt und kein zusätzlicher Port geöffnet. Im verschlüsselten Modus nutzt
 Napback direkt `zfs send -w -p` auf TrueNAS; Docker und rsync werden dafür nicht

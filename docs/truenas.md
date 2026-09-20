@@ -1,5 +1,27 @@
 # TrueNAS setup
 
+Run `napback setup` on the PC for guidance at every input (German), or
+`napback setup --language en` for English. Type `?` to repeat the current help.
+The SSH host is a **TrueNAS user plus NAS address**, e.g. `backup@192.168.1.10`;
+it is not the full web-interface URL. The separate SSH key field takes the
+private-key path on the PC, not its contents and not the `.pub` file.
+
+Enable **System > Services > SSH**. In **Credentials > Users** (or **Local Users**
+depending on the version), check the account's SSH/shell access and **Public SSH
+Key**. Only the public key is installed on TrueNAS. For unattended use, both
+SSH and any configured `sudo -n` commands must work without password prompts.
+The corresponding Sudo Commands settings are also on the user form. Verify the
+NAS server fingerprint independently before accepting a first connection.
+See the official [SSH service guide](https://www.truenas.com/docs/scale/25.10/scaletutorials/systemsettings/services/sshservicescale/)
+and [user settings](https://www.truenas.com/docs/scale/25.10/scaleuireference/credentials/usersscreen/).
+
+Snapshot tasks are under **Data Protection > Periodic Snapshot Tasks**. A naming
+schema of `auto-%Y-%m-%d_%H-%M` matches the wizard's default `auto-` prefix.
+For existing names starting with `autosnap_`, enter that prefix instead; `*`
+allows all names. A matching snapshot generation must already exist, cover all
+selected children recursively, and be at most 48 hours old by default. Creating
+a periodic task alone does not ensure its first scheduled snapshot has run.
+
 New setup defaults to `zfs_raw`: all selected datasets must already have native
 ZFS encryption. This mode reads even locked datasets through `zfs send -w -p`;
 it needs NAS ZFS send permissions and `timeout`, but no Docker or rsync sender.

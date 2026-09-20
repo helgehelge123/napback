@@ -1,5 +1,21 @@
 # Validation record
 
+## Version 0.3.1: guided TrueNAS setup
+
+Validated on 2026-09-20: **101 tests passed** on CachyOS/Python 3.14.7.
+The additional wizard checks cover help, invalid-input retries, explicit key
+paths without displaying key contents, custom snapshot prefixes, English mode,
+actionable SSH errors and preserving a nonempty destination.
+
+The installed wizard was also run against the existing isolated encrypted
+TrueNAS parent/child fixture using real SSH, an explicit key and passwordless
+sudo. It listed datasets, validated common snapshots, initialized a separate
+empty local repository and saved a configuration accepted by the installed
+`plan` command. No production backup configuration or timer was created.
+The installed version reported 0.3.1 and the KDE tray service remained active.
+
+## Previous transfer and recovery validation
+
 Validation performed on 2026-09-20 for version 0.3.0, building on the version 0.1/0.2
 transfer and recovery tests documented below. Tests use synthetic data;
 production applications were not stopped and production datasets were not copied
