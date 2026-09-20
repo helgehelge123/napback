@@ -1,5 +1,18 @@
 # Validation record
 
+## Version 0.3.2: shorter setup instructions
+
+Validated on 2026-09-20: **101 tests passed** locally. The wizard displays short
+action hints by default; `?` opens the detailed help. Existing interactive tests
+exercise both views. An installed setup run against the isolated encrypted
+TrueNAS parent/child fixture completed successfully with the detailed snapshot
+instructions hidden. No backup timer was activated for the test.
+
+Dataset input now explicitly rejects filesystem paths such as `/mnt/tank/data`
+with a correction showing the dataset-name form. Snapshot help includes concrete
+UI steps for a first snapshot and a daily task. Snapshot-task exclusions remain
+unsupported; selecting a parent whose children lack snapshots still fails safely.
+
 ## Version 0.3.1: guided TrueNAS setup
 
 Validated on 2026-09-20: **101 tests passed** on CachyOS/Python 3.14.7.

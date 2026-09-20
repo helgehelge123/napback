@@ -21,8 +21,8 @@ class Guide:
     def say(self, german, english):
         print(self.tr(german, english))
 
-    def ask(self, prompt, explanation, validate=lambda value: value, default=None):
-        print("\n" + explanation)
+    def ask(self, prompt, explanation, validate=lambda value: value, default=None, *, intro=None):
+        print("\n" + (intro if intro is not None else explanation))
         while True:
             suffix = f" [{default}]" if default is not None else ""
             value = input(prompt + suffix + ": ").strip()
@@ -124,6 +124,15 @@ class Guide:
 
     def datasets(self, value):
         names = [name.strip() for name in value.split(",") if name.strip()]
+        if any(name.startswith("/") for name in names):
+            raise ValueError(
+                self.tr(
+                    "Den Dataset-Namen ohne /mnt/ eingeben: z. B. Apps statt /mnt/Apps.\n"
+                    "Verwende den Namen aus der ersten Spalte der Liste.",
+                    "Enter the dataset name without /mnt/: for example Apps instead of /mnt/Apps.\n"
+                    "Use the name from the first column of the list.",
+                )
+            )
         if not names or any(
             not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:/-]*", name)
             or any(part in ("", ".", "..") for part in name.split("/"))
@@ -178,20 +187,32 @@ def connection_help(guide, probe):
 
 def snapshot_help(guide):
     return guide.tr(
-        "TrueNAS: Data Protection > Periodic Snapshot Tasks. Für das Dataset einen\n"
-        "regelmäßigen Snapshot-Auftrag anlegen oder prüfen; mit Kindern 'Recursive' aktivieren.\n"
-        "Beispiel für 'Naming Schema': auto-%Y-%m-%d_%H-%M. Dazu passt hier auto-.\n"
-        "Bei vorhandenen Namen wie autosnap_2026... hier autosnap_ wählen.\n"
-        "Der Namensanfang ist ein Filter, kein Auftrag zum Erstellen von Snapshots.\n"
-        "Vor dem Fortfahren muss mindestens eine passende Generation bereits existieren.\n"
-        "Napback benötigt eine gemeinsame Generation für Eltern und Kinder, höchstens 48 Stunden alt.",
-        "TrueNAS: Data Protection > Periodic Snapshot Tasks. Create or check a regular\n"
-        "snapshot task for this dataset; enable 'Recursive' when including children.\n"
-        "Example 'Naming Schema': auto-%Y-%m-%d_%H-%M. Use auto- as the prefix here.\n"
-        "For existing names such as autosnap_2026..., choose autosnap_ instead.\n"
-        "The prefix filters existing snapshots; it does not create them.\n"
-        "At least one matching generation must already exist before continuing.\n"
-        "Napback needs a common generation for parents and children, at most 48 hours old.",
+        "Ein Snapshot hält den Stand Deiner Daten auf dem NAS fest. Napback kopiert diesen Stand.\n"
+        "Bei Namen wie auto-2026-09-20: Enter drücken. Bei anderen Namen: * eingeben.\n\n"
+        "Noch keine Snapshots? Für jedes gewählte Dataset in der TrueNAS-Weboberfläche:\n"
+        "1. Data Protection öffnen. Bei Periodic Snapshot Tasks auf Add klicken.\n"
+        "2. Bei Dataset denselben Namen wie hier wählen. Recursive anhaken: Das nimmt Kinder mit.\n"
+        "3. Schedule: Daily. Snapshot Lifetime: 7 DAYS. Enabled anhaken.\n"
+        "4. Naming Schema: auto-%Y-%m-%d_%H-%M. Mit Save speichern.\n"
+        "5. Für den ersten Stand: Data Protection > Snapshots > Add öffnen.\n"
+        "   Dataset wieder wählen, Recursive anhaken, Name: auto-erste-sicherung. Save klicken.\n"
+        "6. Hier auto- übernehmen. Nun kann Napback diesen ersten Stand finden.\n\n"
+        "Ein bestehender Auftrag genügt, wenn er alle gewählten Kinder einschließt.\n"
+        "Ausgeschlossene Kinder kann Napback nicht automatisch überspringen.\n"
+        "Alle gewählten Datasets brauchen einen gemeinsamen Snapshot, höchstens 48 Stunden alt.",
+        "A snapshot records the state of your data on the NAS. Napback copies that state.\n"
+        "For names such as auto-2026-09-20, press Enter. For other names, enter *.\n\n"
+        "No snapshots yet? For each selected dataset, in the TrueNAS web interface:\n"
+        "1. Open Data Protection. Click Add under Periodic Snapshot Tasks.\n"
+        "2. Select the same Dataset as here. Check Recursive to include children.\n"
+        "3. Schedule: Daily. Snapshot Lifetime: 7 DAYS. Check Enabled.\n"
+        "4. Naming Schema: auto-%Y-%m-%d_%H-%M. Click Save.\n"
+        "5. For the first snapshot, open Data Protection > Snapshots > Add.\n"
+        "   Choose the dataset again, check Recursive, Name: auto-first-backup. Click Save.\n"
+        "6. Accept auto- here. Napback can now find that first snapshot.\n\n"
+        "An existing task is enough if it includes all selected children.\n"
+        "Napback cannot automatically skip excluded children.\n"
+        "All selected datasets need a common snapshot, at most 48 hours old.",
     )
 
 
@@ -201,11 +222,9 @@ def setup(config_path, language="de"):
     g = Guide(language)
     g.say(
         "Napback – TrueNAS Schritt für Schritt einrichten.\n"
-        "Enter übernimmt [Vorgaben]. Mit ? wiederholst Du die Hilfe zum Feld; Strg+C bricht ab.\n"
-        "Die TrueNAS-Menünamen beziehen sich auf SCALE/Community; ältere Versionen können abweichen.",
+        "Enter übernimmt [Vorgaben]. Mehr Hilfe: ? eingeben. Abbrechen: Strg+C.",
         "Napback — step-by-step TrueNAS setup.\n"
-        "Enter accepts [defaults]. Type ? to repeat field help; Ctrl+C cancels.\n"
-        "TrueNAS menu names refer to SCALE/Community; older versions can differ.",
+        "Enter accepts [defaults]. Type ? for more help. Ctrl+C cancels.",
     )
     host = g.ask(
         g.tr(
@@ -231,6 +250,12 @@ def setup(config_path, language="de"):
             "An existing ~/.ssh/config alias such as my-nas also works.",
         ),
         g.host,
+        intro=g.tr(
+            "Dein TrueNAS-Benutzer und die NAS-Adresse, mit @ dazwischen.\n"
+            "Beispiel: backup@192.168.1.10 — ohne https://. Ein SSH-Alias geht auch.",
+            "Your TrueNAS username and NAS address, joined with @.\n"
+            "Example: backup@192.168.1.10 — without https://. An SSH alias also works.",
+        ),
     )
     key = g.ask(
         g.tr(
@@ -256,6 +281,12 @@ def setup(config_path, language="de"):
             "For a key passphrase, the SSH agent must also be available to the background service.",
         ),
         g.key,
+        intro=g.tr(
+            "Pfad zu Deinem SSH-Schlüssel auf dem PC, z. B. ~/.ssh/id_ed25519_nas.\n"
+            "Nur den Pfad eingeben. Falls SSH schon ohne Passwort funktioniert: Enter.",
+            "Path to your SSH key on this PC, for example ~/.ssh/id_ed25519_nas.\n"
+            "Enter the path only. If SSH already works without a password prompt, press Enter.",
+        ),
     )
     use_sudo = g.ask(
         g.tr("Erhöhte Rechte auf dem NAS verwenden?", "Use elevated permissions on the NAS?"),
@@ -273,6 +304,12 @@ def setup(config_path, language="de"):
         ),
         g.yes_no,
         g.tr("j", "y"),
+        intro=g.tr(
+            "Mit einem TrueNAS-Admin-Konto normalerweise Enter drücken.\n"
+            "Damit darf Napback die nötigen ZFS-Befehle auf dem NAS ausführen.",
+            "With a TrueNAS admin account, usually press Enter.\n"
+            "This allows Napback to run the required ZFS commands on the NAS.",
+        ),
     )
     options = ["-i", key, "-oIdentitiesOnly=yes"] if key else None
     probe = core.Config(
@@ -281,11 +318,11 @@ def setup(config_path, language="de"):
     g.say("\nPrüfe Verbindung und lese Dataset-Liste …", "\nChecking access and reading datasets …")
     try:
         listing = probe.remote(
-            ["zfs", "list", "-H", "-o", "name,used,encryption,mountpoint", "-t", "filesystem"]
+            ["zfs", "list", "-H", "-o", "name,used,encryption", "-t", "filesystem"]
         )
     except core.BackupError as error:
         raise core.BackupError(connection_help(g, probe) + "\n\n" + str(error)) from error
-    g.say("\nDATASET\tBELEGT\tVERSCHLÜSSELUNG\tNAS-PFAD", "\nDATASET\tUSED\tENCRYPTION\tNAS PATH")
+    g.say("\nDATASET\tBELEGT\tVERSCHLÜSSELUNG", "\nDATASET\tUSED\tENCRYPTION")
     print(listing)
     sources = g.ask(
         g.tr("Welche Datasets sichern?", "Which datasets should be backed up?"),
@@ -304,12 +341,24 @@ def setup(config_path, language="de"):
             "For encrypted storage, every child must also be encrypted (not 'off').",
         ),
         g.datasets,
+        intro=g.tr(
+            "Namen aus der ersten Spalte eingeben. Beispiel: Apps — nicht /mnt/Apps.\n"
+            "Alles darunter wird mitgesichert. Mehrere Namen mit Kommas trennen.",
+            "Enter names from the first column. Example: Apps — not /mnt/Apps.\n"
+            "Everything below is included. Separate multiple names with commas.",
+        ),
     )
     prefix = g.ask(
-        g.tr("Snapshot-Namensanfang (* = alle Namen)", "Snapshot prefix (* = all names)"),
+        g.tr("Welche Snapshot-Namen verwenden?", "Which snapshot names should be used?"),
         snapshot_help(g),
         g.prefix,
         "auto-",
+        intro=g.tr(
+            "Heißen Deine Snapshots z. B. auto-2026-09-20? Dann Enter drücken.\n"
+            "Bei anderen Namen: * eingeben. Noch keine Snapshots? ? zeigt die Einrichtung.",
+            "Are your snapshots named like auto-2026-09-20? Press Enter.\n"
+            "For other names, enter *. No snapshots yet? Type ? for setup instructions.",
+        ),
     )
     target = g.ask(
         g.tr("Neuer Zielordner auf diesem PC", "New destination folder on this PC"),
@@ -324,6 +373,12 @@ def setup(config_path, language="de"):
             "Mount an external disk first and use its correct path.",
         ),
         g.destination,
+        intro=g.tr(
+            "Hier landen die Backups auf Deinem PC. Beispiel: ~/NAS-Backup.\n"
+            "Wähle einen neuen oder leeren Ordner. Eine externe Platte vorher einbinden.",
+            "This is where backups will be stored on your PC. Example: ~/NAS-Backup.\n"
+            "Choose a new or empty folder. Mount an external disk first.",
+        ),
     )
     storage = g.ask(
         g.tr("Speichermodus", "Storage mode"),
@@ -341,6 +396,15 @@ def setup(config_path, language="de"):
         ),
         g.storage,
         "zfs_raw",
+        intro=g.tr(
+            "Enter: Die Backups bleiben wie auf dem NAS verschlüsselt.\n"
+            "Alle Quellen müssen verschlüsselt sein. Zum Wiederherstellen brauchst Du\n"
+            "TrueNAS/ZFS und den Originalschlüssel; sichere den Schlüssel separat.\n"
+            "files wählen: unverschlüsselte, direkt lesbare Dateien.",
+            "Enter: backups keep the NAS encryption. All sources must be encrypted.\n"
+            "Restore requires TrueNAS/ZFS and the original key; keep the key separately.\n"
+            "Choose files for unencrypted, directly readable files.",
+        ),
     )
     image = ""
     if storage == "files":
@@ -353,6 +417,10 @@ def setup(config_path, language="de"):
                 "napback-source:0.1.0 nur eingeben, wenn dieses Image vorher auf dem NAS gebaut wurde.",
                 "Optional, files mode only: leave empty if TrueNAS has rsync installed.\n"
                 "Enter napback-source:0.1.0 only if that image was built on the NAS beforehand.",
+            ),
+            intro=g.tr(
+                "Normalerweise einfach Enter drücken.",
+                "Normally, just press Enter.",
             ),
         )
     interval = g.ask(
@@ -369,6 +437,12 @@ def setup(config_path, language="de"):
         ),
         g.interval,
         "1",
+        intro=g.tr(
+            "Enter: jede Minute nach neuen Snapshots schauen.\n"
+            "Kopiert wird nur, wenn es etwas Neues gibt. Andere Minutenanzahl: 1 bis 1440.",
+            "Enter: check for new snapshots every minute.\n"
+            "Data is copied only when a snapshot changes. Other intervals: 1 to 1440 minutes.",
+        ),
     )
     config = {
         "target": target,
@@ -422,6 +496,12 @@ def setup(config_path, language="de"):
         ),
         g.yes_no,
         g.tr("j", "y"),
+        intro=g.tr(
+            "Enter: Backups ab jetzt automatisch abholen, solange Du angemeldet bist.\n"
+            "n: nur speichern und später manuell mit napback run starten.",
+            "Enter: start fetching backups automatically while you are logged in.\n"
+            "n: save only and run napback run manually later.",
+        ),
     ):
         install_timer(config_path)
     return {"status": "configured", "target": config["target"]}

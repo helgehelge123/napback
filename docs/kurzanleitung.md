@@ -50,7 +50,7 @@ napback setup
 ```
 
 Der Assistent erklärt jeden Schritt auf Deutsch direkt vor der Eingabe. `?`
-wiederholt die Hilfe zum aktuellen Feld; Enter übernimmt die Vorgabe in eckigen
+öffnet bei Bedarf die ausführliche Hilfe zum aktuellen Feld; Enter übernimmt die Vorgabe in eckigen
 Klammern. Falsche Eingaben kannst Du direkt korrigieren. Englisch ist mit
 `napback setup --language en` verfügbar.
 
@@ -59,7 +59,7 @@ Klammern. Falsche Eingaben kannst Du direkt korrigieren. Englisch ist mit
 | TrueNAS-Zugang / SSH-Host | `backup@192.168.1.10`: vor `@` der Benutzer auf TrueNAS, dahinter die NAS-Adresse. Kein `https://` und kein Ordnerpfad. Ein vorhandener SSH-Alias geht ebenfalls. |
 | SSH-Schlüsseldatei | Pfad zum privaten Schlüssel auf Deinem PC, etwa `~/.ssh/id_ed25519_nas`. Nicht den Schlüsselinhalt eingeben. Der öffentliche Schlüssel aus der passenden `.pub`-Datei gehört in TrueNAS zum Benutzer. |
 | Erhöhte Rechte / sudo | Ja, wenn Dein NAS-Benutzer ZFS-Befehle mit `sudo -n` ohne Passwortabfrage ausführen darf. |
-| Datasets | Vollständige Namen aus der angezeigten Liste, etwa `tank/dokumente,tank/fotos`. Kinder werden mitgesichert. |
+| Datasets | Vollständige Namen aus der angezeigten Liste, etwa `tank/dokumente,tank/fotos`. **Ohne `/mnt/` eingeben:** `Apps` statt `/mnt/Apps`. Kinder werden mitgesichert. |
 | Snapshot-Namensanfang | `auto-` passt zu `auto-2026-09-20_12-00`; bei `autosnap_...` entsprechend `autosnap_`. `*` erlaubt alle Namen. |
 | Zielordner | Neuer oder leerer Ordner auf dem PC, etwa `~/NAS-Backup` oder auf einer bereits eingebundenen Festplatte. |
 | Speichermodus | `zfs_raw` erhält die vorhandene ZFS-Verschlüsselung; `files` speichert unverschlüsselte Dateien. |
@@ -94,7 +94,7 @@ die gewählte Generation höchstens 48 Stunden alt sein.
 
 Nur beim alternativen Modus `files` kann als Docker-Image `napback-source:0.1.0` verwendet werden. Es wird auf dem
 NAS mit `docker compose -f docker/compose.yaml build` erstellt. Das Sender-Image
-bleibt auch mit Napback 0.3.1 bei Version 0.1.0. Alternativ verwendet Napback das
+bleibt auch mit Napback 0.3.2 bei Version 0.1.0. Alternativ verwendet Napback das
 auf dem NAS installierte rsync. Es wird kein dauerhaft laufender Container
 benötigt und kein zusätzlicher Port geöffnet. Im verschlüsselten Modus nutzt
 Napback direkt `zfs send -w -p` auf TrueNAS; Docker und rsync werden dafür nicht

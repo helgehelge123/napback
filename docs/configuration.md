@@ -8,8 +8,8 @@ can use separately named units generated from the supplied unit structure.
 ## Guided setup
 
 Run `napback setup` for German guidance or `napback setup --language en` for
-English. Each field explains its meaning and the relevant TrueNAS settings;
-`?` repeats that field's help. The wizard accepts `user@NAS-address` or an SSH
+English. Each field shows a short action hint; `?` opens detailed help with the relevant
+TrueNAS settings. Dataset names are entered without the `/mnt/` filesystem prefix. The wizard accepts `user@NAS-address` or an SSH
 alias, with an optional separate private-key path. An explicit key path becomes
 `ssh_options: ["-i", "/absolute/path/to/key", "-oIdentitiesOnly=yes"]`; the key
 contents are never copied into the configuration. Leaving it blank preserves

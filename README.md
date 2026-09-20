@@ -100,7 +100,8 @@ napback setup
 napback setup --language en  # Use this instead for English
 ```
 
-Each question includes a TrueNAS explanation and examples; `?` repeats the help.
+Each question shows a short action hint; `?` opens detailed TrueNAS help.
+Enter dataset names without `/mnt/`, for example `Apps` rather than `/mnt/Apps`.
 “SSH host” means `user@NAS-address`, such as `backup@192.168.1.10`, or an existing
 SSH alias. A separate field accepts the private SSH key's **path on the PC**;
 the matching public key belongs in the TrueNAS user's settings. Setup explains

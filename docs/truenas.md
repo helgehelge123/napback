@@ -1,7 +1,7 @@
 # TrueNAS setup
 
 Run `napback setup` on the PC for guidance at every input (German), or
-`napback setup --language en` for English. Type `?` to repeat the current help.
+`napback setup --language en` for English. Type `?` for detailed help. The default view uses short action hints.
 The SSH host is a **TrueNAS user plus NAS address**, e.g. `backup@192.168.1.10`;
 it is not the full web-interface URL. The separate SSH key field takes the
 private-key path on the PC, not its contents and not the `.pub` file.
@@ -21,6 +21,12 @@ For existing names starting with `autosnap_`, enter that prefix instead; `*`
 allows all names. A matching snapshot generation must already exist, cover all
 selected children recursively, and be at most 48 hours old by default. Creating
 a periodic task alone does not ensure its first scheduled snapshot has run.
+
+A parent selection includes every child dataset. Napback currently cannot
+automatically inherit exclusions from a TrueNAS snapshot task. A child excluded
+from snapshots can therefore prevent a backup of the parent; do not remove
+system-dataset exclusions merely to bypass this check. Select the intended data
+datasets explicitly instead.
 
 New setup defaults to `zfs_raw`: all selected datasets must already have native
 ZFS encryption. This mode reads even locked datasets through `zfs send -w -p`;

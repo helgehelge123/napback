@@ -20,6 +20,7 @@ def test_setup_saves_explicit_key_prefix_and_retries_invalid_input(tmp_path, mon
             "?",
             "https://nas.local/",
             "backup@nas.local",
+            "?",
             str(public),
             str(key),
             "vielleicht",
@@ -39,7 +40,7 @@ def test_setup_saves_explicit_key_prefix_and_retries_invalid_input(tmp_path, mon
 
     def remote(config, _args):
         observed.append(config.ssh_options)
-        return "tank/documents\t1M\taes-256-gcm\t/mnt/tank/documents\n"
+        return "tank/documents\t1M\taes-256-gcm\n"
 
     with (
         patch.object(core.Config, "remote", remote),
@@ -84,7 +85,7 @@ def test_english_setup_remains_available(tmp_path, monkeypatch, capsys):
     ):
         assert main(["--config", str(config), "setup", "--language", "en"]) == 0
     assert core.Config.load(config).snapshot_prefix == ""
-    assert "SSH is the encrypted connection" in capsys.readouterr().out
+    assert "Your TrueNAS username and NAS address" in capsys.readouterr().out
 
 
 def test_existing_target_is_rejected_without_modification(tmp_path):
