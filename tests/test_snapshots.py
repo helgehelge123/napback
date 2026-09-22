@@ -139,3 +139,37 @@ def test_poll_configuration_preserves_content_fingerprint(snapshot_job):
     config.check_interval_minutes = 99
     config.trigger = "interval"
     assert config.fingerprint() == original
+
+
+@pytest.mark.parametrize("state", ["failed", "checking", "running", "interrupted"])
+def test_unsuccessful_scheduled_checks_retry_after_one_minute(snapshot_job, state):
+    _, config, _, selected = snapshot_job
+    config.check_interval_minutes = 60
+    run_selected(config, selected, now=100000, scheduled=True)
+    path = config.target / "last-check.json"
+    previous = core.read_json(path)
+    previous.update(status=state, error="NAS unavailable")
+    core.write_json(path, previous)
+    with patch("napback.core.plan_sources") as plan:
+        assert core.run(config, now=100059, scheduled=True)["status"] == "check_not_due"
+        plan.assert_not_called()
+    assert run_selected(config, selected, now=100060, scheduled=True)["status"] == "no_new_snapshot"
+    assert "error" not in core.status(config)["last_check"]
+    assert config.check_interval_minutes == 60
+    # Once the connection succeeds, the user's ordinary interval applies again.
+    with patch("napback.core.plan_sources") as plan:
+        assert core.run(config, now=100120, scheduled=True)["status"] == "check_not_due"
+        plan.assert_not_called()
+    assert len(core.completed(config)) == 1
+
+
+def test_real_discovery_failure_gets_early_scheduled_retry(snapshot_job):
+    _, config, _, selected = snapshot_job
+    config.check_interval_minutes = 1440
+    with patch("napback.core.plan_sources", side_effect=core.BackupError("Network is unreachable")):
+        with pytest.raises(core.BackupError, match="Network is unreachable"):
+            core.run(config, now=100000, scheduled=True)
+    assert core.status(config)["last_check"]["status"] == "failed"
+    assert not core.completed(config)
+    assert run_selected(config, selected, now=100060, scheduled=True)["status"] == "completed"
+    assert config.check_interval_minutes == 1440

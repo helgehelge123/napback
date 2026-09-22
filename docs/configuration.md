@@ -205,3 +205,10 @@ checks can complete, even with unchanged dataset GUIDs. Failed exports prevent
 publication; they do not silently produce a partial successful backup.
 
 Encrypted ZFS volumes (zvols / virtual disks) are supported in `zfs_raw` mode, including recursive children. File mode rejects selected volumes instead of silently skipping them. See [VM backups](virtual-machines.md).
+
+
+After a failed or interrupted check, Napback retries on the next minute tick
+once at least 60 seconds have elapsed since that attempt started. This also
+covers a PC starting before its network is ready. After a successful check, the
+configured `check_interval_minutes` applies again. Existing successful backups
+are preserved, and the repository lock still prevents overlapping attempts.

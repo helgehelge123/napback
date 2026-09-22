@@ -796,7 +796,13 @@ def scheduled_check_due(config, now):
     if state.get("config_fingerprint") != config.fingerprint():
         return True
     elapsed = now - state["started_at"]
-    return elapsed < -300 or elapsed >= config.check_interval_minutes * 60
+    interval = config.check_interval_minutes * 60
+    # A boot/resume check can precede network readiness. Failed or interrupted
+    # attempts must not postpone recovery for the normal (possibly daily) interval.
+    # run() owns the repository lock here, so checking/running means an orphaned attempt.
+    if state.get("status") in ("failed", "checking", "running", "interrupted"):
+        interval = min(interval, 60)
+    return elapsed < -300 or elapsed >= interval
 
 
 @contextmanager
